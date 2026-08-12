@@ -1,0 +1,3 @@
+/tech-design-me : (Sangat Disarankan) Jika Anda ingin kita langsung merumuskan Arsitektur Teknis aplikasinya (contoh: menentukan framework Python apa yang dipakai, database-nya apa, dan menggunakan library apa untuk membaca PDF/Excel-nya).
+/design-sys-me Aplikasi Report : Jika Anda ingin kita mendiskusikan tampilan visual (UI/UX) aplikasinya (seperti tata letak dashboard, pemilihan warna maskapai/bandara, dan nuansa desain aplikasinya).
+/fsd-me Modul Dashboard : Jika Anda masih ingin membedah secara fungsional spesifikasi data chart di Dashboard.

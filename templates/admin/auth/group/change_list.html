@@ -1,0 +1,90 @@
+{% extends "admin/base_stitch.html" %}
+{% load i18n admin_urls static admin_list %}
+{% block title %}Management Group{% endblock %}
+{% block breadcrumbs_active %}Groups{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-8">
+    <!-- Page Header & Actions -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h2 class="font-display-lg text-display-lg text-text-heading">Management Group &amp; Authorization</h2>
+            <p class="font-body-md text-body-md text-text-body mt-1">Configure user roles and system access permissions.</p>
+        </div>
+        <div class="flex gap-3">
+            <button class="px-4 py-2 bg-surface text-primary border border-primary rounded-lg font-body-md font-bold hover:bg-surface-container-low transition-colors">
+                Edit Permissions
+            </button>
+            <a href="{% url 'admin:auth_group_add' %}" class="px-4 py-2 bg-primary text-on-primary rounded-lg font-body-md font-bold flex items-center gap-2 hover:bg-surface-tint transition-colors">
+                <span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                Add Group
+            </a>
+        </div>
+    </div>
+    <!-- Data Table Container -->
+    <div class="bg-surface rounded-xl border border-border-subtle overflow-hidden">
+        <!-- Table Header Controls -->
+        <div class="px-6 py-4 border-b border-border-subtle flex justify-between items-center bg-surface-container-lowest">
+            <form method="get" class="relative w-64">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant text-sm" data-icon="search">search</span>
+                <input name="q" value="{{ cl.query }}" class="w-full pl-9 pr-4 py-2 rounded-lg border border-outline-variant bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Search groups..." type="text"/>
+            </form>
+            <div class="flex items-center gap-2">
+                <button class="p-2 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors flex items-center justify-center">
+                    <span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+                </button>
+            </div>
+        </div>
+        <!-- Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-surface-container-low border-b border-border-subtle">
+                        <th class="px-6 py-3 font-table-header text-table-header text-text-body uppercase tracking-wider w-1/4">Group Name</th>
+                        <th class="px-6 py-3 font-table-header text-table-header text-text-body uppercase tracking-wider w-2/4">Permissions</th>
+                        <th class="px-6 py-3 font-table-header text-table-header text-text-body uppercase tracking-wider w-1/4 text-right">Member Count</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border-subtle font-body-sm text-text-body">
+                    {% for group in cl.result_list %}
+                    <tr class="hover:bg-primary hover:bg-opacity-5 transition-colors group cursor-pointer" onclick="window.location='{% url 'admin:auth_group_change' group.id %}'">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-primary-container bg-opacity-20 flex items-center justify-center text-primary">
+                                    <span class="material-symbols-outlined text-sm" data-icon="group">group</span>
+                                </div>
+                                <div>
+                                    <span class="font-bold text-text-heading block">{{ group.name }}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex flex-wrap gap-2">
+                                {% for perm in group.permissions.all|slice:":5" %}
+                                <span class="px-2 py-1 bg-surface-container-high rounded text-xs border border-outline-variant text-on-surface-variant">{{ perm.name }}</span>
+                                {% endfor %}
+                                {% if group.permissions.count > 5 %}
+                                <span class="px-2 py-1 bg-surface-container-high rounded text-xs border border-outline-variant text-on-surface-variant">+{{ group.permissions.count|add:"-5" }} more</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right font-mono-data">
+                            {{ group.user_set.count }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="text-center py-4">No groups found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <!-- Pagination (Simplified) -->
+        <div class="px-6 py-4 border-t border-border-subtle flex justify-between items-center bg-surface-container-lowest text-xs text-on-surface-variant">
+            <span>Showing 1 to 3 of 3 entries</span>
+            <div class="flex gap-1">
+                <button class="px-2 py-1 rounded border border-outline-variant text-on-surface-variant hover:bg-surface-container disabled:opacity-50" disabled="">Previous</button>
+                <button class="px-2 py-1 rounded border border-outline-variant text-on-surface-variant hover:bg-surface-container disabled:opacity-50" disabled="">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

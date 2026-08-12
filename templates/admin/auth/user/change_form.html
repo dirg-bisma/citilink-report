@@ -1,0 +1,68 @@
+{% extends "admin/base_stitch.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}Edit User{% endblock %}
+{% block breadcrumbs_active %}Edit User{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto flex flex-col gap-stack-md mt-6 pb-20">
+    <div class="flex items-center gap-4 mb-4">
+        <a href="{% url 'admin:auth_user_changelist' %}" class="p-2 rounded-full hover:bg-surface-container transition-colors text-on-surface-variant">
+            <span class="material-symbols-outlined text-xl" data-icon="arrow_back">arrow_back</span>
+        </a>
+        <h2 class="font-headline-md text-headline-md text-text-heading">{% if add %}Add User{% else %}Edit {{ original|truncatewords:"18" }}{% endif %}</h2>
+    </div>
+
+    <div class="bg-surface rounded-xl border border-outline-variant shadow-sm p-6">
+        <form {% if has_file_field %}enctype="multipart/form-data" {% endif %}action="{{ form_url }}" method="post" id="{{ opts.model_name }}_form" novalidate>
+            {% csrf_token %}
+            {{ media }}
+            
+            {% if errors %}
+                <div class="p-4 mb-6 bg-error-container text-on-error-container rounded-lg border border-error">
+                    <p class="font-bold">Please correct the error below.</p>
+                    {{ adminform.form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            <div class="space-y-6">
+                {% for fieldset in adminform %}
+                    <fieldset class="space-y-4">
+                        {% if fieldset.name %}<h3 class="font-bold text-lg border-b border-outline-variant pb-2">{{ fieldset.name }}</h3>{% endif %}
+                        {% if fieldset.description %}<p class="text-sm text-on-surface-variant mb-4">{{ fieldset.description }}</p>{% endif %}
+                        
+                        <div class="grid grid-cols-1 gap-4">
+                        {% for line in fieldset %}
+                            {% for field in line %}
+                                <div class="flex flex-col gap-1">
+                                    <div class="font-medium text-sm text-on-surface-variant {% if field.field.is_required %}required{% endif %}">
+                                        {{ field.label_tag }}
+                                    </div>
+                                    <div class="[&>input:not([type=checkbox])]:w-full [&>input:not([type=checkbox])]:px-3 [&>input:not([type=checkbox])]:py-2 [&>input:not([type=checkbox])]:rounded-lg [&>input:not([type=checkbox])]:border [&>input:not([type=checkbox])]:border-outline-variant [&>input:not([type=checkbox])]:bg-surface [&>input:not([type=checkbox]):focus]:ring-primary [&>select]:w-full [&>select]:px-3 [&>select]:py-2 [&>select]:rounded-lg [&>select]:border [&>select]:border-outline-variant [&>select]:bg-surface [&>select[multiple]]:min-h-[200px] [&>textarea]:w-full [&>textarea]:px-3 [&>textarea]:py-2 [&>textarea]:rounded-lg [&>textarea]:border [&>textarea]:border-outline-variant [&>textarea]:bg-surface flex flex-col md:flex-row md:items-center gap-2">
+                                        {{ field.field }}
+                                    </div>
+                                    {% if field.field.help_text %}
+                                        <p class="text-xs text-on-surface-variant mt-1">{{ field.field.help_text|safe }}</p>
+                                    {% endif %}
+                                    {% if field.field.errors %}
+                                        <p class="text-xs text-status-error mt-1">{{ field.field.errors }}</p>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% endfor %}
+                        </div>
+                    </fieldset>
+                {% endfor %}
+            </div>
+            
+            <div class="mt-8 pt-6 border-t border-outline-variant flex flex-wrap justify-end gap-3">
+                <input type="submit" value="Save" class="px-6 py-2 bg-primary text-on-primary rounded-lg font-bold hover:bg-primary-container transition-colors cursor-pointer" name="_save">
+                <input type="submit" value="Save and continue" class="px-4 py-2 bg-surface border border-primary text-primary rounded-lg font-bold hover:bg-surface-container transition-colors cursor-pointer" name="_continue">
+                {% if not add and has_delete_permission %}
+                    <a href="{% url 'admin:auth_user_delete' original.pk %}" class="px-4 py-2 bg-error-container text-on-error-container rounded-lg font-bold hover:bg-error hover:text-on-error transition-colors ml-auto">Delete</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
