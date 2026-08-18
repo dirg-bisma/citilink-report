@@ -25,6 +25,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter, column_index_from_string
+from openpyxl.formula.translate import Translator
 
 from core.models import Project, ScheduleVersion
 
@@ -91,7 +92,7 @@ def _detect_columns(ws):
     # Scan baris 4-7 untuk mapping kolom metadata (baris terbawah prioritas tertinggi jika ada tumpang tindih)
     for row_idx in [4, 5, 6, 7]:
         for c in range(1, ws.max_column + 1):
-            v = ws.cell(row=row_idx, column=c).value
+            v = ws.cell(row_idx, c).value
             if v is None:
                 continue
             v_str = str(v).strip().upper()
@@ -123,7 +124,7 @@ def _detect_columns(ws):
     # Kolom hari pertama: cari kolom dengan header angka "1" di baris 6 atau 7
     for row_idx in [6, 7]:
         for c in range(1, ws.max_column + 1):
-            v = ws.cell(row=row_idx, column=c).value
+            v = ws.cell(row_idx, c).value
             if str(v).strip() == '1' or v == 1:
                 cols['day_start'] = c
                 break
@@ -190,11 +191,19 @@ def _block_end(ws, start, next_start, total_rows):
 # ---------------------------------------------------------------------------
 
 def _copy_row(ws, src_row, dst_row):
-    """Salin nilai, style, dan tinggi baris dari src ke dst."""
+    """Salin nilai, style, dan tinggi baris dari src ke dst, termasuk menerjemahkan formula."""
     for col in range(1, ws.max_column + 1):
         src = ws.cell(src_row, col)
         dst = ws.cell(dst_row, col)
-        dst.value = src.value
+        
+        val = src.value
+        if isinstance(val, str) and val.startswith('='):
+            try:
+                dst.value = Translator(val, src.coordinate).translate_formula(dst.coordinate)
+            except Exception:
+                dst.value = val
+        else:
+            dst.value = val
         if src.has_style:
             dst.font = copy(src.font)
             dst.border = copy(src.border)
@@ -264,6 +273,24 @@ def _shift_merged_ranges_below(ws, row_idx, amount):
 
 
 # ---------------------------------------------------------------------------
+# Shift Formulas
+# ---------------------------------------------------------------------------
+
+def _shift_formulas_below(ws, row_idx, amount):
+    """Update seluruh formula di bawah row_idx karena ada penyisipan baris."""
+    for r in range(row_idx + amount, ws.max_row + 1):
+        for c in range(1, ws.max_column + 1):
+            cell = ws.cell(r, c)
+            val = cell.value
+            if isinstance(val, str) and val.startswith('='):
+                old_coord = ws.cell(r - amount, c).coordinate
+                try:
+                    cell.value = Translator(val, old_coord).translate_formula(cell.coordinate)
+                except Exception:
+                    pass
+
+
+# ---------------------------------------------------------------------------
 # Rebuild Totals
 # ---------------------------------------------------------------------------
 
@@ -283,7 +310,7 @@ def _rebuild_totals(ws, start, end, cols, month_col_map):
             all_day_cols = []
             for m_num in sorted(month_col_map.keys()):
                 m_start = month_col_map[m_num]
-                days = calendar.monthrange(2026, m_num)[1]  # akan diupdate
+                days = calendar.monthrange(2026, m_num)[1]
                 all_day_cols.extend(range(m_start, m_start + days))
             if all_day_cols:
                 c_start = get_column_letter(min(all_day_cols))
@@ -471,6 +498,7 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
             insert_at = row_end + 1
             ws.insert_rows(insert_at, block_len)
             _shift_merged_ranges_below(ws, insert_at, block_len)
+            _shift_formulas_below(ws, insert_at, block_len)
 
             # Salin seluruh blok SEMULA ke posisi MENJADI
             for offset in range(block_len):
