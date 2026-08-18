@@ -39,53 +39,76 @@ def process_wtt(project_id: int, wtt_file_id: int):
 
 
 def process_pprp(project_id: int, pprp_file_id: int):
-    """Apply PPRP changes: create child rows, mark active"""
+    """
+    Apply PPRP: buat ScheduleVersion baru untuk setiap flight yang ada di bagian MENJADI.
+
+    Catatan penting:
+    - WTT records (version_number=1) TIDAK di-deactivate, agar GHP matching tetap berjalan.
+    - Satu PPRP record dibuat per (flight_number + pprp_letter) — idempotent.
+    - Matching parent dilakukan berdasarkan flight_number saja (bukan rute),
+      karena PPRP sering mengubah rute penerbangan.
+    """
     project = Project.objects.get(id=project_id)
     pprp_file = SourceFile.objects.get(id=pprp_file_id)
-    
+
     data = parse_pprp(pprp_file.file_path)
-    
+
+    if not data['flights']:
+        pprp_file.status = 'FAILED'
+        pprp_file.error_message = 'Tidak ada data flight ditemukan di bagian MENJADI pada PDF ini.'
+        pprp_file.save()
+        return 0
+
+    created = 0
     with transaction.atomic():
         for flight in data['flights']:
-            # Find parent: active version with same flight_number + origin + dest
+            # Cari parent WTT: cukup cocokkan berdasarkan flight_number saja
             parent = ScheduleVersion.objects.filter(
                 project=project,
                 flight_number=flight['flight_number'],
-                origin=flight['origin'],
-                destination=flight['destination'],
-                is_active=True,
+                version_number=1,
             ).first()
-            
+
             if not parent:
-                continue  # ponytail: no parent = skip, log later if needed
-            
-            # Deactivate parent
-            parent.is_active = False
-            parent.save()
-            
-            # Create child
+                # Flight ini tidak ada di WTT — skip
+                continue
+
+            # Idempotent check: jika PPRP untuk flight ini sudah ada, skip
+            already_exists = ScheduleVersion.objects.filter(
+                project=project,
+                flight_number=flight['flight_number'],
+                pprp_letter=data['letter_number'],
+            ).exists()
+
+            if already_exists:
+                continue
+
+            # Buat ScheduleVersion baru untuk PPRP (MENJADI)
             ScheduleVersion.objects.create(
                 project=project,
                 parent_version=parent,
-                version_number=parent.version_number + 1,
+                version_number=2,
                 is_active=True,
                 flight_number=flight['flight_number'],
                 origin=flight['origin'],
                 destination=flight['destination'],
-                flight_date=parent.flight_date,  # ponytail: keep original date, PPRP only changes time
-                aircraft=flight['aircraft'],
+                # flight_date = tanggal mulai berlaku PPRP
+                flight_date=flight['pprp_date'],
                 std=flight['std'],
                 sta=flight['sta'],
-                atd=flight['std'],  # ponytail: PPRP std = new atd
+                atd=flight['std'],  # gunakan STD sebagai ATD default
                 ata=flight['sta'],
                 pprp_letter=data['letter_number'],
+                pprp_date=flight['pprp_date'],
                 source_wtt=parent.source_wtt,
                 source_pprp=pprp_file,
             )
-    
+            created += 1
+
     pprp_file.status = 'SUCCESS'
     pprp_file.save()
-    return len(data['flights'])
+    return created
+
 
 
 def process_ghp(project_id: int, ghp_file_id: int):
@@ -98,14 +121,12 @@ def process_ghp(project_id: int, ghp_file_id: int):
     
     with transaction.atomic():
         for rec in records:
-            # Match key: flight_num + date + origin + dest
+            # Match key: flight_num + date
             schedule = ScheduleVersion.objects.filter(
                 project=project,
                 is_active=True,
                 flight_number=rec['flight_number'],
                 flight_date=rec['flight_date'],
-                origin=rec['origin'],
-                destination=rec['destination'],
             ).first()
             
             if schedule:

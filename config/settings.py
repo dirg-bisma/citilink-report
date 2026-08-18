@@ -142,3 +142,73 @@ MAILERS = {
 }
 
 LOGOUT_REDIRECT_URL = '/admin/login/'
+
+from django.urls import reverse_lazy
+
+UNFOLD = {
+    "SITE_TITLE": "Citilink Admin",
+    "SITE_HEADER": "Citilink FSRS",
+    "SITE_URL": "/",
+    "COLORS": {
+        "primary": {
+            "50": "#f0fdf4",
+            "100": "#dcfce7",
+            "200": "#bbf7d0",
+            "300": "#86efac",
+            "400": "#4ade80",
+            "500": "#22c55e",
+            "600": "#006b32",  # Citilink primary green
+            "700": "#15803d",
+            "800": "#166534",
+            "900": "#14532d",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": "Navigation",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Dashboard",
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                    },
+                    {
+                        "title": "Upload Data",
+                        "icon": "cloud_upload",
+                        "link": reverse_lazy("custom_upload"),
+                    },
+                    {
+                        "title": "Flight Schedules",
+                        "icon": "flight_takeoff",
+                        "link": reverse_lazy("admin:core_scheduleversion_changelist"),
+                    },
+                    {
+                        "title": "Projects",
+                        "icon": "folder",
+                        "link": reverse_lazy("admin:core_project_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Administration",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "User Management",
+                        "icon": "group",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": "Groups",
+                        "icon": "admin_panel_settings",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}

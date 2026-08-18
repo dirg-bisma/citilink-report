@@ -45,7 +45,7 @@ def parse_wtt(pdf_path: str) -> List[Dict]:
                 pattern = pattern_match.group(1)
                 
                 # Find route: nearest 3-letter codes before this flight
-                route_codes = re.findall(r'\b([A-Z]{3})\b', text[max(0, line_start-200):match.start()])
+                route_codes = re.findall(r'\b([A-Z]{3})\b', text[max(0, line_start-1000):match.start()])
                 if len(route_codes) < 2:
                     continue
                 origin, dest = route_codes[-2], route_codes[-1]

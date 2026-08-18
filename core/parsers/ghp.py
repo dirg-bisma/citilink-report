@@ -23,16 +23,26 @@ def parse_ghp(excel_path: str) -> List[Dict]:
             continue
         
         # Parse flight number from route string
-        flight_match = re.search(r'QG\d+', str(route_str))
-        if not flight_match:
+        flight_matches = re.findall(r'QG\d+', str(route_str))
+        if not flight_matches:
             continue
-        flight_no = flight_match.group(0)
-        
+            
         # Parse route: extract 3-letter codes
         routes = re.findall(r'\b([A-Z]{3})\b', str(route_str))
         if len(routes) < 2:
             continue
-        origin, destination = routes[0], routes[1]
+            
+        # Jika ada multileg (misal: QG435 -QG486 /BPN -SUB -BDJ)
+        # flight_matches = ['QG435', 'QG486']
+        # routes = ['BPN', 'SUB', 'BDJ']
+        # Pasangkan masing-masing flight dengan rutenya
+        legs = []
+        for i in range(min(len(flight_matches), len(routes) - 1)):
+            legs.append({
+                'flight': flight_matches[i],
+                'origin': routes[i],
+                'dest': routes[i+1]
+            })
         
         # Parse date: "01/04" -> assume year from filename
         date_parts = str(date_str).split('/')
@@ -43,14 +53,15 @@ def parse_ghp(excel_path: str) -> List[Dict]:
         else:
             continue
         
-        records.append({
-            'flight_number': flight_no,
-            'origin': origin,
-            'destination': destination,
-            'flight_date': flight_date,
-            'std': str(std) if pd.notna(std) else '',
-            'atd': str(atd) if pd.notna(atd) else '',
-            'aircraft': str(aircraft) if pd.notna(aircraft) else '',
-        })
+        for leg in legs:
+            records.append({
+                'flight_number': leg['flight'],
+                'origin': leg['origin'],
+                'destination': leg['dest'],
+                'flight_date': flight_date,
+                'std': str(std) if pd.notna(std) else '',
+                'atd': str(atd) if pd.notna(atd) else '',
+                'aircraft': str(aircraft) if pd.notna(aircraft) else '',
+            })
     
     return records

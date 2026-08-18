@@ -1,9 +1,8 @@
 from django.contrib import admin
 from django.urls import path
-from core.views import quick_create_group, quick_create_user
+from core.views import upload_source_file_view
 
 urlpatterns = [
-    path('admin/quick-create-group/', quick_create_group, name='quick_create_group'),
-    path('admin/quick-create-user/', quick_create_user, name='quick_create_user'),
+    path('admin/upload-data/', upload_source_file_view, name='custom_upload'),
     path('admin/', admin.site.urls),
 ]
