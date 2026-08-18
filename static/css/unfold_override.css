@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Override default font with modern Inter font */
+html, body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* Smooth out generic cards for a refined Material-like feel */
+body .bg-white, 
+body .rounded-xl,
+body .rounded-md,
+body .rounded-lg {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+    border-radius: 16px !important;
+    border: none !important;
+}
+
+/* Dark mode generic cards */
+body.dark .bg-gray-800,
+body.dark .rounded-xl,
+body.dark .rounded-md,
+body.dark .rounded-lg {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Fix sidebar which shouldn't have rounded corners */
+body aside, body aside .bg-white, body.dark aside .bg-gray-800, body aside div {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Buttons micro-interactions */
+body button, body .btn, body input[type="submit"], body a[class*="bg-primary"] {
+    border-radius: 20px !important; /* Pill shape for buttons */
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+button:hover, .btn:hover, input[type="submit"]:hover, a.bg-primary-600:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 107, 50, 0.2) !important;
+}
+
+/* Table rows smooth hover */
+tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+/* Inputs smoothing */
+input[type="text"], input[type="password"], select, textarea {
+    border-radius: 8px !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
