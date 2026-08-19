@@ -25,7 +25,6 @@ class SourceFile(models.Model):
         ('WTT', 'Working Time Table'),
         ('PPRP', 'Perubahan Perencanaan'),
         ('GHP', 'Ground Handling Performance'),
-        ('TEMPLATE', 'Template Output'),
     ]
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),

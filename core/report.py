@@ -21,9 +21,8 @@ import datetime
 import os
 import tempfile
 from copy import copy
-from pathlib import Path
-
-from openpyxl import load_workbook
+import openpyxl
+from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.formula.translate import Translator
 
@@ -61,7 +60,7 @@ def _detect_columns(ws):
     Juga deteksi mapping bulan -> kolom_mulai (untuk pengisian harian).
     """
     cols = {
-        'no': 1,
+        'no': None,
         'flight': 2,
         'to': 3,
         'etd': 4,
@@ -96,7 +95,7 @@ def _detect_columns(ws):
             if v is None:
                 continue
             v_str = str(v).strip().upper()
-            if v_str in ('NO', 'NO.') and cols['no'] == 1:
+            if v_str in ('NO', 'NO.') and cols['no'] is None:
                 cols['no'] = c
             elif 'FLT' in v_str and 'NO' in v_str:
                 cols['flight'] = c
@@ -130,6 +129,9 @@ def _detect_columns(ws):
                 break
         if cols.get('day_start'):
             break
+
+    if cols['no'] is None:
+        cols['no'] = 1
 
     return cols, month_col_map
 
@@ -342,11 +344,18 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
     # Tentukan template path
     if not template_path:
         template_path = project.template_path
+        
+    # Fallback ke static template
     if not template_path or not os.path.exists(template_path):
-        raise FileNotFoundError(
-            f"Template Excel tidak ditemukan: '{template_path}'. "
-            "Silakan upload file Template melalui menu Upload Data."
-        )
+        from django.conf import settings
+        static_template = os.path.join(settings.BASE_DIR, 'static', 'tpl', 'form_realisasi_winter26.xlsx')
+        if os.path.exists(static_template):
+            template_path = static_template
+        else:
+            raise FileNotFoundError(
+                f"Template Excel tidak ditemukan: '{template_path}' maupun di folder static. "
+                "Pastikan file form_realisasi_winter26.xlsx ada di dalam folder static/tpl/."
+            )
 
     # --- Ambil semua schedule versions untuk project ini ---
     schedules = ScheduleVersion.objects.filter(
@@ -468,6 +477,18 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
                 ws.cell(row_start, cols['atd']).value = fd['wtt']['atd']
             if cols.get('ata') and fd['wtt'].get('ata'):
                 ws.cell(row_start, cols['ata']).value = fd['wtt']['ata']
+
+        # Update SEMULA block: pastikan Tipe Pengajuan diset ke 'Perpanjangan'
+        if cols.get('tipe'):
+            target_row = row_start
+            for rng in ws.merged_cells.ranges:
+                if (rng.min_col <= cols['tipe'] <= rng.max_col and
+                        rng.min_row <= row_start <= rng.max_row):
+                    target_row = rng.min_row
+                    break
+            cell = ws.cell(target_row, cols['tipe'])
+            if type(cell).__name__ != 'MergedCell':
+                cell.value = 'Perpanjangan'
 
         # Jika tidak ada PPRP, skip proses duplikasi blok
         if not fd['pprp_list']:
@@ -607,3 +628,309 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
     # --- Simpan output ---
     wb.save(output_path)
     return seq - 1  # Jumlah blok yang diisi
+
+
+def load_template_flight_metadata(template_path: str = None) -> dict:
+    """
+    Ekstrak metadata baseline per flight dari template Excel resmi:
+    - route (misal: 'SUB-CGK', 'SUB-BTH', 'SUB-BDJ')
+    - periode (misal: '29 MAR 2026/24 OKT 2026')
+    - surat (misal: 'AU.012/29/19/DRJU-DAU-2026')
+    - tipe (misal: 'Perpanjangan')
+    - start_date & end_date (parsed datetime.date)
+    """
+    MONTHS_ID = {'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MEI': 5, 'JUN': 6, 'JUL': 7, 'AGU': 8, 'SEP': 9, 'OKT': 10, 'NOV': 11, 'DES': 12}
+    
+    def _parse_d(s):
+        m = re.search(r'(\d{1,2})\s+([A-Z]{3})\s+(\d{4})', s.upper())
+        if m:
+            d = int(m.group(1))
+            mon = MONTHS_ID.get(m.group(2), 1)
+            yr = int(m.group(3))
+            return datetime.date(yr, mon, d)
+        return None
+
+    path_to_use = template_path if (template_path and os.path.exists(template_path)) else os.path.join('static', 'tpl', 'form_realisasi_winter26.xlsx')
+    if not os.path.exists(path_to_use):
+        return {}
+
+    try:
+        wb = load_workbook(path_to_use, data_only=True)
+        ws = wb.active
+        meta = {}
+        for r in range(8, ws.max_row + 1):
+            flt = ws.cell(r, 2).value
+            if flt and re.match(r'^QG[- ]?\d+', str(flt).strip(), re.IGNORECASE):
+                norm = _normalize_flight(flt)
+                route = ws.cell(r, 3).value
+                periode = ws.cell(r, 8).value
+                surat = ws.cell(r, 9).value
+                tipe = ws.cell(r, 10).value
+                
+                start_d, end_d = None, None
+                if periode and '/' in str(periode):
+                    parts = str(periode).split('/')
+                    start_d = _parse_d(parts[0])
+                    end_d = _parse_d(parts[1]) if len(parts) > 1 else None
+                    
+                meta[norm] = {
+                    'route': str(route).strip() if route else '',
+                    'periode': str(periode).strip() if periode else '',
+                    'surat': str(surat).strip() if surat else '',
+                    'tipe': str(tipe).strip() if tipe else 'Perpanjangan',
+                    'start_date': start_d,
+                    'end_date': end_d,
+                }
+        return meta
+    except Exception:
+        return {}
+
+
+def format_id_date_abbr(d: datetime.date) -> str:
+    """Format tanggal ke '29 MAR 2026'."""
+    if not d:
+        return ''
+    m_abbr = MONTH_ABBR.get(d.month, '')
+    return f"{d.day:02d} {m_abbr} {d.year}"
+
+
+def get_project_report_data(project_id: int) -> dict:
+    """
+    Mengambil dan menyusun data rekonsiliasi penerbangan dari database
+    untuk ditampilkan pada Report Viewer HTML maupun diekspor ke Excel.
+    Hanya mengambil penerbangan keberangkatan dari Surabaya (origin='SUB').
+    """
+    project = Project.objects.get(id=project_id)
+    tpl_meta = load_template_flight_metadata(project.template_path)
+    
+    all_schedules = ScheduleVersion.objects.filter(
+        project=project,
+        origin='SUB'
+    ).order_by('flight_number', 'version_number', 'flight_date')
+    
+    from collections import defaultdict
+    flight_groups = defaultdict(list)
+    for s in all_schedules:
+        flight_groups[s.flight_number].append(s)
+        
+    rows = []
+    grand_planned = 0
+    grand_operated = 0
+    
+    periode_label = f"Summer {str(project.year)[-2:]} (S-{str(project.year)[-2:]})" if project.month in range(3, 11) else f"Winter {str(project.year)[-2:]} (W-{str(project.year)[-2:]})"
+    month_abbr_name = INDONESIAN_MONTHS.get(project.month, '')
+    month_label = f"{month_abbr_name[:3]}-{str(project.year)[-2:]}"
+    
+    row_seq = 1
+    for f_num in sorted(flight_groups.keys()):
+        items = flight_groups[f_num]
+        v1_items = [s for s in items if s.version_number == 1]
+        v2_items = [s for s in items if s.version_number == 2]
+        
+        f_norm = _normalize_flight(f_num)
+        base_meta = tpl_meta.get(f_norm, {})
+        
+        # Route: SUB-XXX
+        dest_code = v1_items[0].destination if v1_items else (v2_items[0].destination if v2_items else '')
+        route_str = base_meta.get('route') or f"SUB-{dest_code}"
+        
+        # Base metadata defaults
+        base_surat = base_meta.get('surat') or '-'
+        base_tipe = 'Perpanjangan'
+        base_periode = base_meta.get('periode') or f"29 MAR {project.year}/24 OKT {project.year}"
+        start_season_d = base_meta.get('start_date') or datetime.date(project.year, 3, 29)
+        end_season_d = base_meta.get('end_date') or datetime.date(project.year, 10, 24)
+        
+        if not v2_items:
+            # Case 1: Pure Baseline Flight (No PPRP changes)
+            first_item = v1_items[0]
+            days_dict = {s.flight_date.day: s for s in v1_items}
+            
+            total_planned = len(v1_items)
+            total_operated = sum(1 for s in v1_items if s.operational_flag)
+            grand_planned += total_planned
+            grand_operated += total_operated
+            
+            pct = (total_operated / total_planned * 100) if total_planned > 0 else 0
+            
+            weekdays_present = {item.flight_date.isoweekday() for item in v1_items}
+            pattern = "".join(str(d) if d in weekdays_present else "-" for d in range(1, 8))
+            
+            days_row = []
+            for day in range(1, 32):
+                if day in days_dict:
+                    s = days_dict[day]
+                    days_row.append({
+                        'day': day,
+                        'is_scheduled': True,
+                        'is_operated': bool(s.operational_flag),
+                        'val': '1' if s.operational_flag else '0'
+                    })
+                else:
+                    days_row.append({
+                        'day': day,
+                        'is_scheduled': False,
+                        'is_operated': False,
+                        'val': '-'
+                    })
+                    
+            rows.append({
+                'no': row_seq,
+                'flight_number': f_num,
+                'origin': first_item.origin or 'SUB',
+                'to': route_str,
+                'etd': first_item.std.strftime('%H:%M') if first_item.std else '',
+                'eta': first_item.sta.strftime('%H:%M') if first_item.sta else '',
+                'atd': first_item.atd.strftime('%H:%M') if first_item.atd else (first_item.std.strftime('%H:%M') if first_item.std else ''),
+                'ata': first_item.ata.strftime('%H:%M') if first_item.ata else (first_item.sta.strftime('%H:%M') if first_item.sta else ''),
+                'periode': base_periode,
+                'pprp_no': base_surat,
+                'pprp_type': base_tipe,
+                'day_pattern': pattern,
+                'total_planned': total_planned,
+                'month_label': month_label,
+                'days': days_row,
+                'total_operated': total_operated,
+                'pct': round(pct, 1),
+            })
+            row_seq += 1
+        else:
+            # Case 2: Flight has PPRP changes (generate Row 1: SEMULA, Row 2: Perubahan)
+            pprp_first = v2_items[0]
+            pprp_start_date = pprp_first.pprp_date or v2_items[0].flight_date
+            semula_end_date = pprp_start_date - datetime.timedelta(days=1)
+            
+            # Formatted period strings
+            periode_semula = f"{format_id_date_abbr(start_season_d)}/{format_id_date_abbr(semula_end_date)}"
+            periode_perubahan = f"{format_id_date_abbr(pprp_start_date)}/{format_id_date_abbr(end_season_d)}"
+            
+            # Determine submission_type from PPRP file if possible
+            sub_type = 'Perubahan'
+            if pprp_first.source_pprp:
+                try:
+                    from core.parsers.pprp import parse_pprp
+                    sub_type = parse_pprp(pprp_first.source_pprp.file_path).get('submission_type', 'Perubahan')
+                except Exception:
+                    sub_type = 'Perubahan'
+            
+            # --- 1. Row SEMULA (WTT Baseline before PPRP start date) ---
+            semula_items = [s for s in v1_items if s.flight_date < pprp_start_date]
+            first_semula = v1_items[0] if v1_items else pprp_first
+            semula_days_dict = {s.flight_date.day: s for s in semula_items}
+            
+            total_planned_semula = len(semula_items)
+            total_operated_semula = sum(1 for s in semula_items if s.operational_flag)
+            grand_planned += total_planned_semula
+            grand_operated += total_operated_semula
+            pct_semula = (total_operated_semula / total_planned_semula * 100) if total_planned_semula > 0 else 0
+            
+            weekdays_present_semula = {item.flight_date.isoweekday() for item in v1_items}
+            pattern_semula = "".join(str(d) if d in weekdays_present_semula else "-" for d in range(1, 8))
+            
+            days_row_semula = []
+            for day in range(1, 32):
+                if day in semula_days_dict:
+                    s = semula_days_dict[day]
+                    days_row_semula.append({
+                        'day': day,
+                        'is_scheduled': True,
+                        'is_operated': bool(s.operational_flag),
+                        'val': '1' if s.operational_flag else '0'
+                    })
+                else:
+                    days_row_semula.append({
+                        'day': day,
+                        'is_scheduled': False,
+                        'is_operated': False,
+                        'val': '-'
+                    })
+                    
+            rows.append({
+                'no': row_seq,
+                'flight_number': f_num,
+                'origin': first_semula.origin or 'SUB',
+                'to': route_str,
+                'etd': first_semula.std.strftime('%H:%M') if first_semula.std else '',
+                'eta': first_semula.sta.strftime('%H:%M') if first_semula.sta else '',
+                'atd': first_semula.atd.strftime('%H:%M') if first_semula.atd else (first_semula.std.strftime('%H:%M') if first_semula.std else ''),
+                'ata': first_semula.ata.strftime('%H:%M') if first_semula.ata else (first_semula.sta.strftime('%H:%M') if first_semula.sta else ''),
+                'periode': periode_semula,
+                'pprp_no': base_surat,
+                'pprp_type': base_tipe,
+                'day_pattern': pattern_semula,
+                'total_planned': total_planned_semula,
+                'month_label': month_label,
+                'days': days_row_semula,
+                'total_operated': total_operated_semula,
+                'pct': round(pct_semula, 1),
+            })
+            row_seq += 1
+            
+            # --- 2. Row MENJADI / PPRP (on and after PPRP start date) ---
+            pprp_days_dict = {s.flight_date.day: s for s in v2_items}
+            total_planned_pprp = len(v2_items)
+            total_operated_pprp = sum(1 for s in v2_items if s.operational_flag)
+            grand_planned += total_planned_pprp
+            grand_operated += total_operated_pprp
+            pct_pprp = (total_operated_pprp / total_planned_pprp * 100) if total_planned_pprp > 0 else 0
+            
+            weekdays_present_pprp = {item.flight_date.isoweekday() for item in v2_items}
+            pattern_pprp = "".join(str(d) if d in weekdays_present_pprp else "-" for d in range(1, 8))
+            
+            days_row_pprp = []
+            for day in range(1, 32):
+                if day in pprp_days_dict:
+                    s = pprp_days_dict[day]
+                    days_row_pprp.append({
+                        'day': day,
+                        'is_scheduled': True,
+                        'is_operated': bool(s.operational_flag),
+                        'val': '1' if s.operational_flag else '0'
+                    })
+                else:
+                    days_row_pprp.append({
+                        'day': day,
+                        'is_scheduled': False,
+                        'is_operated': False,
+                        'val': '-'
+                    })
+                    
+            rows.append({
+                'no': row_seq,
+                'flight_number': f_num,
+                'origin': pprp_first.origin or 'SUB',
+                'to': route_str,
+                'etd': pprp_first.std.strftime('%H:%M') if pprp_first.std else '',
+                'eta': pprp_first.sta.strftime('%H:%M') if pprp_first.sta else '',
+                'atd': pprp_first.atd.strftime('%H:%M') if pprp_first.atd else (pprp_first.std.strftime('%H:%M') if pprp_first.std else ''),
+                'ata': pprp_first.ata.strftime('%H:%M') if pprp_first.ata else (pprp_first.sta.strftime('%H:%M') if pprp_first.sta else ''),
+                'periode': periode_perubahan,
+                'pprp_no': pprp_first.pprp_letter or base_surat,
+                'pprp_type': sub_type,
+                'day_pattern': pattern_pprp,
+                'total_planned': total_planned_pprp,
+                'month_label': month_label,
+                'days': days_row_pprp,
+                'total_operated': total_operated_pprp,
+                'pct': round(pct_pprp, 1),
+            })
+            row_seq += 1
+        
+    grand_pct = (grand_operated / grand_planned * 100) if grand_planned > 0 else 0
+    now = datetime.datetime.now()
+    signature_date = f"Surabaya, {now.day} {INDONESIAN_MONTHS.get(now.month, 'Januari')} {now.year}"
+    
+    return {
+        'project': project,
+        'periode_label': periode_label,
+        'month_name': INDONESIAN_MONTHS.get(project.month, ''),
+        'year': project.year,
+        'rows': rows,
+        'grand_planned': grand_planned,
+        'grand_operated': grand_operated,
+        'grand_pct': round(grand_pct, 1),
+        'days_header': list(range(1, 32)),
+        'signature_date': signature_date,
+        'total_flight_groups': len(rows),
+    }
+

@@ -4,6 +4,26 @@ import re
 from typing import List, Dict
 
 
+def detect_ghp_period(excel_path: str) -> int:
+    """Detect month from GHP Excel date column (DD/MM)"""
+    df = pd.read_excel(excel_path, header=None)
+    for idx, row in df.iterrows():
+        if idx < 7:
+            continue
+        date_str = row[0]
+        if pd.isna(date_str):
+            continue
+        date_parts = str(date_str).strip().split('/')
+        if len(date_parts) >= 2:
+            try:
+                month = int(date_parts[1])
+                if 1 <= month <= 12:
+                    return month
+            except (ValueError, TypeError):
+                continue
+    raise ValueError("Tidak dapat mendeteksi bulan pada file GHP Excel.")
+
+
 def parse_ghp(excel_path: str) -> List[Dict]:
     """Extract normalized operational records from GHP Excel"""
     df = pd.read_excel(excel_path, header=None)
