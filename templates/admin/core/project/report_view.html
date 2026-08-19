@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Realisasi Penerbangan PPRP - {{ project.project_id }}</title>
+    <!-- Google Fonts & Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    
+    <style>
+        :root {
+            --citilink-green: #006b32;
+            --citilink-green-dark: #005226;
+            --citilink-green-light: #e6f4ea;
+            --citilink-yellow: #f8c300;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f3f4f6;
+            color: #111827;
+            line-height: 1.4;
+        }
+
+        /* Top Action Bar */
+        .top-navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .badge-project {
+            background: #e6f4ea;
+            color: #006b32;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #a3d9b8;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .btn-print {
+            background: #ffffff;
+            border-color: #d1d5db;
+            color: #374151;
+        }
+        .btn-print:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+        }
+
+        .btn-excel {
+            background: #006b32;
+            color: #ffffff;
+        }
+        .btn-excel:hover {
+            background: #005226;
+        }
+
+        .btn-close {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+        .btn-close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        /* Document Sheet Container */
+        .sheet-container {
+            max-width: 100%;
+            margin: 20px auto;
+            padding: 0 20px 40px 20px;
+            overflow-x: auto;
+        }
+
+        .sheet-paper {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border-radius: 4px;
+            padding: 24px 28px;
+            min-width: 1380px;
+        }
+
+        /* Kop Dokumen */
+        .kop-section {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        .kop-title {
+            font-size: 15px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #000000;
+        }
+
+        .kop-subtitle {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-top: 2px;
+        }
+
+        .kop-airport {
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+            margin-top: 2px;
+        }
+
+        .kop-period {
+            font-size: 13px;
+            font-weight: 700;
+            color: #006b32;
+            margin-top: 4px;
+        }
+
+        /* Table Styling */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            text-align: center;
+        }
+
+        .report-table th, .report-table td {
+            border: 1px solid #9ca3af;
+            padding: 4px 3px;
+            vertical-align: middle;
+        }
+
+        /* Header Rows */
+        .report-table thead tr:first-child th {
+            background-color: #f3f4f6;
+            font-weight: 700;
+            color: #111827;
+            font-size: 11px;
+        }
+
+        .report-table thead tr:nth-child(2) th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+            font-size: 10px;
+        }
+
+        .th-day {
+            width: 22px;
+            min-width: 22px;
+            max-width: 22px;
+            font-size: 10px;
+            padding: 3px 0 !important;
+            font-weight: 600;
+        }
+
+        /* Data Rows */
+        .report-table tbody tr:hover {
+            background-color: #f0fdf4;
+        }
+
+        .col-flt {
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: #006b32;
+            white-space: nowrap;
+        }
+
+        .col-route {
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .col-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+
+        .col-pattern {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .col-pprp-no {
+            font-size: 9.5px;
+            font-family: 'JetBrains Mono', monospace;
+            min-width: 140px;
+            text-align: left;
+            padding: 4px 6px !important;
+            white-space: nowrap;
+        }
+
+        .col-pprp-type {
+            font-size: 10px;
+            font-weight: 700;
+            min-width: 70px;
+        }
+
+        .type-semula {
+            color: #4b5563;
+        }
+
+        .type-perubahan {
+            color: #006b32;
+            font-weight: 800;
+        }
+
+        .cell-operated {
+            background-color: #dcfce7;
+            color: #15803d;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .cell-unoperated {
+            color: #ef4444;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #fee2e2;
+        }
+
+        .cell-empty {
+            color: #9ca3af;
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #fafafa;
+        }
+
+        .col-total-realisasi {
+            font-weight: 700;
+            background-color: #f0fdf4;
+            color: #006b32;
+            font-size: 11.5px;
+        }
+
+        .col-pct {
+            font-weight: 700;
+            font-size: 11px;
+        }
+
+        /* Grand Total Row */
+        .grand-total-row {
+            background-color: #e5e7eb;
+            font-weight: 800;
+            font-size: 11.5px;
+            border-top: 2px solid #4b5563 !important;
+        }
+
+        /* Legend & Signature Section */
+        .footer-section {
+            margin-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            page-break-inside: avoid;
+        }
+
+        .legend-box {
+            font-size: 11px;
+            color: #374151;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 10px 14px;
+            line-height: 1.6;
+        }
+
+        .signature-box {
+            text-align: center;
+            width: 280px;
+            font-size: 12px;
+        }
+
+        .sig-date {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .sig-title {
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #111827;
+        }
+
+        .sig-space {
+            height: 55px;
+        }
+
+        .sig-name {
+            font-weight: 700;
+            border-bottom: 1px solid #111827;
+            display: inline-block;
+            padding: 0 16px 2px 16px;
+        }
+
+        /* Print Media Queries */
+        @media print {
+            @page {
+                size: A4 landscape;
+                margin: 8mm 6mm;
+            }
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            .top-navbar {
+                display: none !important;
+            }
+            .sheet-container {
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .sheet-paper {
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                min-width: 100% !important;
+            }
+            .report-table {
+                font-size: 9px !important;
+            }
+            .report-table th, .report-table td {
+                padding: 2px 1.5px !important;
+            }
+            .th-day {
+                width: 18px !important;
+                min-width: 18px !important;
+                font-size: 8.5px !important;
+            }
+            .cell-operated {
+                background-color: #e5e7eb !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP ACTION BAR -->
+    <div class="top-navbar">
+        <div class="nav-left">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="material-symbols-outlined" style="color: #006b32; font-size: 26px;">flight_takeoff</span>
+                <span style="font-weight: 800; font-size: 16px; color: #111827;">Citilink FSRS</span>
+            </div>
+            <span class="badge-project">{{ project.project_id }} ({{ report.month_name }} {{ report.year }})</span>
+            <span style="font-size: 12px; color: #6b7280;">• Total Flight Rows: <strong>{{ report.total_flight_groups }}</strong></span>
+        </div>
+        <div class="nav-actions">
+            <button type="button" class="btn btn-print" onclick="window.print()">
+                <span class="material-symbols-outlined" style="font-size: 18px;">print</span> Cetak / Simpan PDF
+            </button>
+            <a href="{% url 'admin:project_download' project.id %}" class="btn btn-excel">
+                <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Export Excel (.xlsx)
+            </a>
+            <button type="button" class="btn btn-close" onclick="window.close()">
+                <span class="material-symbols-outlined" style="font-size: 18px;">close</span> Tutup
+            </button>
+        </div>
+    </div>
+
+    <!-- DOCUMENT SHEET -->
+    <div class="sheet-container">
+        <div class="sheet-paper">
+            
+            <!-- KOP DOKUMEN (Sesuai Baris 1-4 Excel) -->
+            <div class="kop-section">
+                <h1 class="kop-title">REALISASI PENERBANGAN PENETAPAN PELAKSANAAN RUTE PENERBANGAN (PPRP)</h1>
+                <h2 class="kop-subtitle">PT CITILINK INDONESIA</h2>
+                <h3 class="kop-airport">BANDAR UDARA INTERNASIONAL JUANDA - SURABAYA</h3>
+                <p class="kop-period">Periode {{ report.periode_label }} (Bulan {{ report.month_name }} {{ report.year }})</p>
+            </div>
+
+            <!-- TABEL REALISASI (Sesuai Baris 6-7 Excel + Data Database) -->
+            <table class="report-table">
+                <thead>
+                    <!-- Baris Header 1 (Row 6 di Excel) -->
+                    <tr>
+                        <th rowspan="2" style="width: 28px;">NO</th>
+                        <th colspan="2">FLIGHT NUMBER</th>
+                        <th colspan="2">TIME SCHEDULE<br>(UTC)</th>
+                        <th colspan="2">ACTUAL TIME<br>DEPT / ARR</th>
+                        <th rowspan="2" style="min-width: 135px;">PERIODE</th>
+                        <th colspan="2">SURAT PPRP</th>
+                        <th rowspan="2" style="width: 65px;">Day Of<br>Flight</th>
+                        <th rowspan="2" style="width: 65px;">Total<br>Frekuensi</th>
+                        <th rowspan="2" style="width: 55px;">Bulan-<br>Tahun</th>
+                        <th colspan="31">Tanggal</th>
+                        <th rowspan="2" style="width: 55px;">Total<br>Realisasi</th>
+                        <th rowspan="2" style="width: 45px;">%</th>
+                    </tr>
+                    <!-- Baris Header 2 (Row 7 di Excel: Sub-headers & Hari 1-31) -->
+                    <tr>
+                        <th style="width: 55px;">FLT NO</th>
+                        <th style="width: 70px;">TO</th>
+                        <th style="width: 42px;">ETD</th>
+                        <th style="width: 42px;">ETA</th>
+                        <th style="width: 42px;">ATD</th>
+                        <th style="width: 42px;">ATA</th>
+                        <th class="col-pprp-no">NO</th>
+                        <th style="width: 85px;">Tipe</th>
+                        {% for day in report.days_header %}
+                        <th class="th-day">{{ day }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in report.rows %}
+                    <tr>
+                        <td>{{ row.no }}</td>
+                        <td class="col-flt">{{ row.flight_number }}</td>
+                        <td class="col-route" style="font-size: 10px; white-space: nowrap;">{{ row.to }}</td>
+                        <td class="col-time">{{ row.etd }}</td>
+                        <td class="col-time">{{ row.eta }}</td>
+                        <td class="col-time">{{ row.atd }}</td>
+                        <td class="col-time">{{ row.ata }}</td>
+                        <td style="font-size: 9px; font-family: 'JetBrains Mono', monospace; white-space: nowrap;">{{ row.periode }}</td>
+                        <td class="col-pprp-no">{{ row.pprp_no }}</td>
+                        <td class="col-pprp-type {% if row.pprp_type == 'Perubahan' %}type-perubahan{% else %}type-semula{% endif %}">
+                            {{ row.pprp_type }}
+                        </td>
+                        <td class="col-pattern">{{ row.day_pattern }}</td>
+                        <td style="font-weight: 600;">{{ row.total_planned }}</td>
+                        <td style="font-size: 10px;">{{ row.month_label }}</td>
+                        
+                        <!-- 31 Tanggal -->
+                        {% for d in row.days %}
+                            {% if d.is_scheduled %}
+                                {% if d.is_operated %}
+                                <td class="cell-operated" title="Tgl {{ d.day }}: Beroperasi (Ops)">1</td>
+                                {% else %}
+                                <td class="cell-unoperated" title="Tgl {{ d.day }}: Tidak Operasi (No Ops)">0</td>
+                                {% endif %}
+                            {% else %}
+                            <td class="cell-empty" title="Tgl {{ d.day }}: Diluar Jadwal">-</td>
+                            {% endif %}
+                        {% endfor %}
+
+                        <td class="col-total-realisasi">{{ row.total_operated }}</td>
+                        <td class="col-pct {% if row.pct >= 80 %}text-green-700{% elif row.pct >= 50 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ row.pct }}%
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="46" style="padding: 30px; text-align: center; color: #6b7280;">
+                            Belum ada data jadwal penerbangan untuk proyek ini.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <!-- GRAND TOTAL ROW -->
+                    <tr class="grand-total-row">
+                        <td colspan="11" style="text-align: right; padding-right: 12px; font-weight: 800;">GRAND TOTAL FREKUENSI & REALISASI:</td>
+                        <td style="text-align: center; font-weight: 800; font-size: 12px;">{{ report.grand_planned }}</td>
+                        <td></td>
+                        <td colspan="31" style="text-align: center; font-size: 10px; color: #4b5563;">Matriks 31 Hari</td>
+                        <td style="text-align: center; font-weight: 800; font-size: 12px; background-color: #dcfce7; color: #15803d;">{{ report.grand_operated }}</td>
+                        <td style="text-align: center; font-weight: 800; font-size: 12px;">{{ report.grand_pct }}%</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <!-- FOOTER: LEGEND & SIGNATURE -->
+            <div class="footer-section">
+                <!-- LEGENDA RESMI (Baris 266-268 Excel) -->
+                <div class="legend-box">
+                    <p style="font-weight: 700; margin-bottom: 2px; color: #111827;">Keterangan Pengisian:</p>
+                    <p><strong style="color: #6b7280; font-family: 'JetBrains Mono', monospace;">-</strong> &nbsp;= &nbsp;Diluar jadwal penerbangan</p>
+                    <p><strong style="color: #ef4444; font-family: 'JetBrains Mono', monospace;">0</strong> &nbsp;= &nbsp;Tidak Operasi / No Ops</p>
+                    <p><strong style="color: #15803d; font-family: 'JetBrains Mono', monospace;">1</strong> &nbsp;= &nbsp;Beroperasi / Ops</p>
+                </div>
+
+                <!-- TANDA TANGAN -->
+                <div class="signature-box">
+                    <p class="sig-date">{{ report.signature_date }}</p>
+                    <p class="sig-title">PT CITILINK INDONESIA</p>
+                    <div class="sig-space"></div>
+                    <p class="sig-name">STATION MANAGER</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>

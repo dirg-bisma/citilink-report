@@ -37,36 +37,28 @@ from core.report import get_project_report_data, generate_report
 
 @admin.register(Project)
 class ProjectAdmin(ModelAdmin):
-    list_display = ['project_id', 'period', 'year', 'month', 'created_by', 'created_at', 'pprp_action', 'view_report_action', 'download_action']
+    list_display = ['project_id', 'period', 'year', 'month', 'created_by', 'created_at', 'pprp_action', 'view_report_action']
     list_filter = ['year', 'month', 'period']
     search_fields = ['project_id']
     
-    @display(description="PPRP")
+    @display(description="Upload PPRP")
     def pprp_action(self, obj):
         return format_html(
-            '<button type="button" onclick="openPprpModal({}, \'{}\')" class="inline-flex items-center gap-1 text-white text-xs font-medium px-3 py-1.5 rounded transition-opacity hover:opacity-90 shadow-xs cursor-pointer" style="background-color: #006b32; color: white;" title="Upload file PPRP">'
-            '<span class="material-symbols-outlined text-[16px]">upload_file</span> Upload PPRP'
+            '<button type="button" onclick="openPprpModal({}, \'{}\')" class="inline-flex items-center justify-center gap-1.5 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important; text-decoration: none;" title="Upload dokumen surat izin PPRP untuk project ini">'
+            '<span class="material-symbols-outlined text-[17px] text-white">cloud_upload</span>'
+            '<span>Upload PPRP</span>'
             '</button>',
             obj.pk,
             obj.project_id
         )
     
-    @display(description="View")
+    @display(description="View Report")
     def view_report_action(self, obj):
         url = f"/admin/core/project/{obj.pk}/view-report/"
         return format_html(
-            '<a class="inline-flex items-center gap-1 text-white text-xs font-medium px-3 py-1.5 rounded transition-opacity hover:opacity-90 shadow-xs" href="{}" target="_blank" style="background-color: #0284c7; color: white;" title="Buka tampilan laporan di tab baru">'
-            '<span class="material-symbols-outlined text-[16px]">visibility</span> View Report'
-            '</a>',
-            url
-        )
-    
-    @display(description="Report")
-    def download_action(self, obj):
-        url = f"/admin/core/project/{obj.pk}/download/"
-        return format_html(
-            '<a class="inline-flex items-center gap-1 text-white text-xs font-medium px-3 py-1.5 rounded transition-opacity hover:opacity-90 shadow-xs" href="{}" style="background-color: #006b32; color: white;">'
-            '<span class="material-symbols-outlined text-[16px]">download</span> Export Excel'
+            '<a href="{}" target="_blank" class="inline-flex items-center justify-center gap-1.5 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important; text-decoration: none;" title="Buka tampilan laporan realisasi di tab baru">'
+            '<span class="material-symbols-outlined text-[17px] text-white">visibility</span>'
+            '<span>View Report</span>'
             '</a>',
             url
         )
@@ -251,6 +243,7 @@ class ScheduleVersionAdmin(ModelAdmin):
         'display_schedule',
         'display_status',
         'display_operated',
+        'detail_action',
     ]
     list_filter = [
         MonthDropdownFilter,
@@ -301,4 +294,80 @@ class ScheduleVersionAdmin(ModelAdmin):
         if obj.operational_flag:
             return "OPERATED"
         return "UNVERIFIED"
+
+    @display(description="Aksi")
+    def detail_action(self, obj):
+        return format_html(
+            '<button type="button" onclick="openScheduleDetailModal({})" class="inline-flex items-center justify-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md bg-green-50 text-[#006b32] dark:bg-green-950/30 dark:text-green-400 border border-green-200 dark:border-green-800 hover:bg-[#006b32] hover:text-white dark:hover:bg-[#006b32] dark:hover:text-white shadow-2xs transition-all cursor-pointer" title="Lihat rincian lengkap verifikasi data">'
+            '<span class="material-symbols-outlined text-[15px]">info</span> Detail'
+            '</button>',
+            obj.pk
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<int:object_id>/detail-json/', self.admin_site.admin_view(self.detail_json_view), name='scheduleversion_detail_json'),
+        ]
+        return custom_urls + urls
+
+    def detail_json_view(self, request, object_id):
+        try:
+            s = ScheduleVersion.objects.select_related('project', 'source_wtt', 'source_pprp').get(id=object_id)
+            
+            # GHP Source file if any
+            ghp_sf = SourceFile.objects.filter(project=s.project, file_type='GHP', status='SUCCESS').first()
+            ghp_filename = os.path.basename(ghp_sf.file_path) if ghp_sf else 'Belum ada file GHP'
+            
+            wtt_filename = os.path.basename(s.source_wtt.file_path) if s.source_wtt else '-'
+            pprp_filename = os.path.basename(s.source_pprp.file_path) if s.source_pprp else '-'
+            
+            # Determine reason
+            if s.operational_flag:
+                ops_status_desc = "Penerbangan terkonfirmasi beroperasi (Ditemukan catatan pergerakan pada log aktual GHP)"
+            else:
+                if not s.is_active:
+                    ops_status_desc = "Jadwal lama tidak aktif karena telah digantikan oleh penetapan izin PPRP baru"
+                else:
+                    ops_status_desc = "Penerbangan tidak ditemukan pada data GHP yang diunggah (Batal / Tidak Beroperasi / No Ops)"
+            
+            indonesian_months = {
+                1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei", 6: "Juni",
+                7: "Juli", 8: "Agustus", 9: "September", 10: "Oktober", 11: "November", 12: "Desember"
+            }
+            d = s.flight_date
+            flight_date_str = f"{d.day:02d} {indonesian_months.get(d.month, '')} {d.year}"
+            pprp_date_str = f"{s.pprp_date.day:02d} {indonesian_months.get(s.pprp_date.month, '')} {s.pprp_date.year}" if s.pprp_date else '-'
+            
+            c = s.created_at
+            if c:
+                created_at_str = f"{c.day:02d} {indonesian_months.get(c.month, '')} {c.year}, {c.strftime('%H:%M')} WIB"
+            else:
+                created_at_str = '-'
+
+            data = {
+                'id': s.id,
+                'project_id': s.project.project_id,
+                'flight_number': s.flight_number,
+                'version_number': s.version_number,
+                'flight_date': flight_date_str,
+                'created_at': created_at_str,
+                'origin': s.origin,
+                'destination': s.destination,
+                'std': s.std.strftime('%H:%M') if s.std else '--:--',
+                'sta': s.sta.strftime('%H:%M') if s.sta else '--:--',
+                'atd': s.atd.strftime('%H:%M') if s.atd else '--:--',
+                'ata': s.ata.strftime('%H:%M') if s.ata else '--:--',
+                'is_active': s.is_active,
+                'operational_flag': s.operational_flag,
+                'pprp_letter': s.pprp_letter or '-',
+                'pprp_date': pprp_date_str,
+                'source_wtt': wtt_filename,
+                'source_pprp': pprp_filename,
+                'source_ghp': ghp_filename,
+                'ops_status_desc': ops_status_desc,
+            }
+            return JsonResponse({'success': True, 'data': data})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)}, status=404)
 

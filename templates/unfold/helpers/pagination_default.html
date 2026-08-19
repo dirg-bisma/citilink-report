@@ -1,0 +1,80 @@
+{% load custom_tags i18n %}
+
+{% get_page_info cl as pinfo %}
+
+<div class="flex flex-col sm:flex-row items-center justify-between gap-4 w-full py-2">
+    <!-- Left: Data Count Info -->
+    <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium">
+        {% if pinfo.result_count > 0 %}
+            {% blocktranslate with start=pinfo.start_index end=pinfo.end_index count=pinfo.result_count total=pinfo.full_result_count %}
+                Menampilkan <span class="font-bold text-gray-900 dark:text-gray-100">{{ start }} - {{ end }}</span> dari <span class="font-bold text-gray-900 dark:text-gray-100">{{ count }}</span> data
+            {% endblocktranslate %}
+            <span class="text-gray-400 dark:text-gray-500 mx-1">|</span>
+            <span class="text-gray-500 dark:text-gray-400">Total Query: <span class="font-semibold text-gray-800 dark:text-gray-200">{{ pinfo.full_result_count }}</span></span>
+        {% else %}
+            <span class="text-gray-500 dark:text-gray-400">0 data ditemukan</span>
+        {% endif %}
+    </div>
+
+    <!-- Right: Pagination Buttons (First, Prev, 4 Numbers, Next, Last) -->
+    {% if pinfo.num_pages > 1 %}
+        <div class="inline-flex items-center gap-1.5 flex-wrap">
+            <!-- First Button -->
+            {% if pinfo.has_previous %}
+                <a href="{{ pinfo.first_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Pertama">
+                    « First
+                </a>
+            {% else %}
+                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
+                    « First
+                </span>
+            {% endif %}
+
+            <!-- Prev Button -->
+            {% if pinfo.has_previous %}
+                <a href="{{ pinfo.prev_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Sebelumnya">
+                    ‹ Prev
+                </a>
+            {% else %}
+                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
+                    ‹ Prev
+                </span>
+            {% endif %}
+
+            <!-- 4 Numbers Only -->
+            {% for p in pinfo.page_numbers %}
+                {% if p.is_current %}
+                    <span class="inline-flex items-center justify-center min-w-[32px] px-2.5 py-1.5 text-xs font-bold text-white bg-primary-600 rounded dark:bg-primary-500 shadow-xs ring-1 ring-primary-600 select-none">
+                        {{ p.number }}
+                    </span>
+                {% else %}
+                    <a href="{{ p.url }}" class="inline-flex items-center justify-center min-w-[32px] px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs">
+                        {{ p.number }}
+                    </a>
+                {% endif %}
+            {% endfor %}
+
+            <!-- Next Button -->
+            {% if pinfo.has_next %}
+                <a href="{{ pinfo.next_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Berikutnya">
+                    Next ›
+                </a>
+            {% else %}
+                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
+                    Next ›
+                </span>
+            {% endif %}
+
+            <!-- Last Button -->
+            {% if pinfo.has_next %}
+                <a href="{{ pinfo.last_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Terakhir">
+                    Last »
+                </a>
+            {% else %}
+                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
+                    Last »
+                </span>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>

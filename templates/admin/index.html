@@ -1,0 +1,64 @@
+{% extends 'unfold/layouts/base.html' %}
+{% load i18n unfold %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block title %}
+    {% trans 'Dashboard' %} | {{ site_title|default:_('Django site admin') }}
+{% endblock %}
+
+{% block branding %}
+    <h1 id="site-name">
+        <a href="{% url 'admin:index' %}">
+            {{ site_header|default:_('Django administration') }}
+        </a>
+    </h1>
+{% endblock %}
+
+{% block content %}
+    {% include "unfold/helpers/messages.html" %}
+
+    <div class="flex flex-col gap-8">
+        <!-- Header Section -->
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Citilink FSRS Dashboard</h1>
+            <p class="text-gray-500 dark:text-gray-400">Automated Flight Schedule Reporting System overview.</p>
+        </div>
+
+        <!-- Quick Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Flight Schedules</span>
+                <div class="flex items-end gap-3">
+                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">842</span>
+                    <span class="text-sm font-medium text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded-full">Active</span>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Projects</span>
+                <div class="flex items-end gap-3">
+                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">12</span>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Pending Files</span>
+                <div class="flex items-end gap-3">
+                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">3</span>
+                    <span class="text-sm font-medium text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 rounded-full">Requires action</span>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">System Users</span>
+                <div class="flex items-end gap-3">
+                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">42</span>
+                    <span class="text-sm font-medium text-gray-600 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">Registered</span>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+{% endblock %}

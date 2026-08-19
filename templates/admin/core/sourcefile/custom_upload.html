@@ -1,0 +1,755 @@
+{% extends 'unfold/layouts/base.html' %}
+{% load i18n unfold %}
+
+{% block title %}
+    {% trans 'Upload Data' %} | {{ site_title|default:_('Django site admin') }}
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="mb-4">
+    <a href="{% url 'admin:index' %}" class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">{% trans 'Home' %}</a>
+    <span class="mx-2 text-sm text-gray-500">/</span>
+    <span class="text-sm text-gray-900 dark:text-gray-100">{% trans 'Upload Data' %}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+    {% include "unfold/helpers/messages.html" %}
+
+    <style>
+        /* Progress bar animation */
+        @keyframes progress-indeterminate {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(250%); }
+        }
+        .progress-bar-container {
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            background: #e5e7eb;
+        }
+        .dark .progress-bar-container {
+            background: #374151;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 40%;
+            border-radius: 3px;
+            animation: progress-indeterminate 1.5s ease-in-out infinite;
+        }
+        .progress-bar-fill.uploading { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .progress-bar-fill.parsing { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .progress-bar-fill.done { 
+            width: 100% !important; 
+            animation: none;
+            background: linear-gradient(90deg, #22c55e, #4ade80);
+            transition: width 0.3s ease;
+        }
+        .progress-bar-fill.error { 
+            width: 100% !important; 
+            animation: none;
+            background: linear-gradient(90deg, #ef4444, #f87171);
+            transition: width 0.3s ease;
+        }
+        /* Overlay with strong cover */
+        .step-overlay {
+            z-index: 20;
+            background: rgba(249, 250, 251, 0.94) !important;
+            backdrop-filter: blur(4px);
+        }
+        .dark .step-overlay {
+            background: rgba(17, 24, 39, 0.94) !important;
+        }
+    </style>
+
+    <div class="flex flex-col gap-8">
+        
+        <!-- TOP SECTION: UPLOAD FORM -->
+        <div class="bg-white dark:bg-gray-800 p-8 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Upload Source File</h1>
+            <p class="text-gray-500 dark:text-gray-400 mb-6">Unggah file sumber data secara berurutan. Periode Bulan & Tahun otomatis terdeteksi dari dokumen WTT.</p>
+            
+            <div class="space-y-6">
+                <!-- Auto-Detection Status Banner -->
+                <div id="period-banner" class="bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 p-4 rounded-xl flex items-center justify-between transition-all duration-300">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">auto_awesome</span>
+                        <div>
+                            <span class="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Auto-Detect Periode</span>
+                            <p class="text-sm font-medium text-gray-900 dark:text-gray-100" id="period-status-text">
+                                Silakan upload file <strong>WTT (PDF)</strong> untuk memulai. Bulan & Tahun otomatis terdeteksi.
+                            </p>
+                        </div>
+                    </div>
+                    <div id="period-badge-container" class="hidden">
+                        <span id="detected-period-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700">
+                            <span class="material-symbols-outlined text-xs">verified</span>
+                            <span id="detected-period-text">Juli 2026</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Stepper -->
+                <div class="relative flex flex-col md:flex-row gap-6 md:gap-4 justify-between" id="stepper-container">
+                    
+                    <!-- Step 1: WTT (PDF) - Active by default -->
+                    <div class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-sm transition-all duration-300 relative overflow-hidden" id="step-1">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center font-bold text-sm" id="step-1-badge">1</div>
+                            <h3 class="font-bold text-gray-900 dark:text-gray-100">WTT (PDF)</h3>
+                            <span class="ml-auto text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded dark:bg-red-900/30 dark:text-red-400">Mandatory</span>
+                        </div>
+                        
+                        <form id="form-wtt" class="step-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="file_type" value="WTT">
+                            <input type="hidden" name="project_id" id="wtt-project-id" value="">
+                            
+                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative cursor-pointer drop-zone">
+                                <div class="space-y-1 text-center pointer-events-none">
+                                    <span class="material-symbols-outlined text-3xl text-gray-400 group-hover:text-primary-500">picture_as_pdf</span>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                        <span class="text-primary-600 font-medium">Select WTT file</span>
+                                    </div>
+                                    <p class="text-xs text-gray-400">Mendeteksi bulan & baseline jadwal</p>
+                                </div>
+                                <input name="file" type="file" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer file-input" required>
+                            </div>
+                            <div class="file-name-display mt-2 text-xs text-green-600 dark:text-green-400 font-medium hidden flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[16px]">check_circle</span> <span class="file-name-text"></span>
+                            </div>
+                            <!-- Progress Bar -->
+                            <div class="progress-area mt-3 hidden">
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar-fill uploading"></div>
+                                </div>
+                                <p class="progress-label text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
+                            </div>
+                            <!-- Result Notification -->
+                            <div class="result-notification mt-3 hidden"></div>
+                            <button type="submit" class="mt-4 w-full flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
+                                <span class="material-symbols-outlined text-[18px] btn-icon">cloud_upload</span> <span class="btn-text">Upload WTT</span>
+                            </button>
+                        </form>
+                        
+                        <!-- Overlay when disabled (hidden by default on step 1) -->
+                        <div class="absolute inset-0 step-overlay flex items-center justify-center transition-opacity duration-300 hidden opacity-0 pointer-events-none">
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Selesai</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: PPRP (PDF) - In the Middle -->
+                    <div class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-sm transition-all duration-300 relative overflow-hidden" id="step-2">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 flex items-center justify-center font-bold text-sm" id="step-2-badge">2</div>
+                            <h3 class="font-bold text-gray-900 dark:text-gray-100">PPRP (PDF)</h3>
+                            <span class="ml-auto text-xs font-medium bg-gray-100 text-gray-700 px-2 py-1 rounded dark:bg-gray-700 dark:text-gray-300">Optional</span>
+                        </div>
+                        
+                        <form id="form-pprp" class="step-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="file_type" value="PPRP">
+                            <input type="hidden" name="project_id" id="pprp-project-id" value="">
+                            
+                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative cursor-pointer drop-zone">
+                                <div class="space-y-1 text-center pointer-events-none">
+                                    <span class="material-symbols-outlined text-3xl text-gray-400 group-hover:text-primary-500">picture_as_pdf</span>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                        <span class="text-primary-600 font-medium">Select PPRP file</span>
+                                    </div>
+                                    <p class="text-xs text-gray-400">Surat perubahan jadwal</p>
+                                </div>
+                                <input name="file" type="file" accept=".pdf" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer file-input" disabled>
+                            </div>
+                            <div class="file-name-display mt-2 text-xs text-green-600 dark:text-green-400 font-medium hidden flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[16px]">check_circle</span> <span class="file-name-text"></span>
+                            </div>
+                            <!-- Progress Bar -->
+                            <div class="progress-area mt-3 hidden">
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar-fill uploading"></div>
+                                </div>
+                                <p class="progress-label text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
+                            </div>
+                            <!-- Result Notification -->
+                            <div class="result-notification mt-3 hidden"></div>
+                            
+                            <div class="mt-4 flex gap-2">
+                                <button type="submit" class="flex-1 flex justify-center items-center gap-1.5 py-2.5 px-4 shadow-sm text-xs font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
+                                    <span class="material-symbols-outlined text-[17px] btn-icon">cloud_upload</span> <span class="btn-text">Upload PPRP</span>
+                                </button>
+                                <button type="button" id="btn-skip" class="flex-1 flex justify-center items-center gap-1.5 py-2.5 px-4 shadow-sm text-xs font-bold rounded-lg bg-white dark:bg-gray-800 hover:bg-green-50/50 dark:hover:bg-green-950/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer select-none" style="border: 1.5px solid #006b32; color: #006b32;" disabled>
+                                    <span>Skip</span> <span class="material-symbols-outlined text-[17px]">skip_next</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div class="absolute inset-0 step-overlay flex items-center justify-center transition-opacity duration-300">
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 text-center px-4">Upload WTT terlebih dahulu</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3: GHP (Excel) - On the Right -->
+                    <div class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-sm transition-all duration-300 relative overflow-hidden" id="step-3">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-8 h-8 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 flex items-center justify-center font-bold text-sm" id="step-3-badge">3</div>
+                            <h3 class="font-bold text-gray-900 dark:text-gray-100">GHP (Excel)</h3>
+                            <span class="ml-auto text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded dark:bg-red-900/30 dark:text-red-400">Mandatory</span>
+                        </div>
+                        
+                        <form id="form-ghp" class="step-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="file_type" value="GHP">
+                            <input type="hidden" name="project_id" id="ghp-project-id" value="">
+                            
+                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative cursor-pointer drop-zone">
+                                <div class="space-y-1 text-center pointer-events-none">
+                                    <span class="material-symbols-outlined text-3xl text-gray-400 group-hover:text-primary-500">table_view</span>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                        <span class="text-primary-600 font-medium">Select GHP file</span>
+                                    </div>
+                                    <p class="text-xs text-gray-400">Realisasi operasional penerbangan</p>
+                                </div>
+                                <input name="file" type="file" accept=".xlsx,.xls" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer file-input" required disabled>
+                            </div>
+                            <div class="file-name-display mt-2 text-xs text-green-600 dark:text-green-400 font-medium hidden flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[16px]">check_circle</span> <span class="file-name-text"></span>
+                            </div>
+                            <!-- Progress Bar -->
+                            <div class="progress-area mt-3 hidden">
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar-fill uploading"></div>
+                                </div>
+                                <p class="progress-label text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
+                            </div>
+                            <!-- Result Notification -->
+                            <div class="result-notification mt-3 hidden"></div>
+                            <button type="submit" class="mt-4 w-full flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
+                                <span class="material-symbols-outlined text-[18px] btn-icon">cloud_upload</span> <span class="btn-text">Upload GHP</span>
+                            </button>
+                        </form>
+                        
+                        <div class="absolute inset-0 step-overlay flex items-center justify-center transition-opacity duration-300">
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 text-center px-4">Upload PPRP atau lewati terlebih dahulu</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Overall Success Message -->
+                <div id="overall-success" class="hidden bg-green-50 border border-green-200 text-green-800 rounded-lg p-4 dark:bg-green-900/20 dark:border-green-800/50 dark:text-green-400 flex items-center gap-3">
+                    <span class="material-symbols-outlined text-2xl">task_alt</span>
+                    <div>
+                        <h4 class="font-bold">Proses Selesai!</h4>
+                        <p class="text-sm">Seluruh berkas berhasil diproses ke database. Anda dapat melihat laporan atau me-reload halaman untuk memeriksa riwayat.</p>
+                    </div>
+                    <button type="button" onclick="window.location.reload()" class="ml-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Refresh Halaman
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM SECTION: TABLE VIEW (Upload History with Action Delete) -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden mt-8">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Upload History</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Riwayat file sumber data yang diunggah ke sistem.</p>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" id="history-table">
+                    <thead class="bg-gray-50 dark:bg-gray-900/50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">File Name</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Project</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Uploaded At</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Uploader</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" id="history-tbody">
+                        {% for file in history %}
+                        <tr id="row-file-{{ file.id }}" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate" title="{{ file.file_path }}">
+                                    {{ file.file_path|slice:"-35:" }}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900 dark:text-gray-300 font-medium">{{ file.project.project_id }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                    {% if file.file_type == 'WTT' %}bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300
+                                    {% elif file.file_type == 'PPRP' %}bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300
+                                    {% elif file.file_type == 'GHP' %}bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300
+                                    {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                    {{ file.file_type }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {{ file.uploaded_at|date:"Y-m-d H:i" }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {{ file.uploaded_by.username }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if file.status == 'SUCCESS' %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                    {% elif file.status == 'FAILED' %}bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
+                                    {% elif file.status == 'PROCESSING' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
+                                    {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                    {{ file.status }}
+                                </span>
+                                {% if file.status == 'FAILED' %}
+                                    <span class="material-symbols-outlined text-xs text-red-500 ml-1 cursor-help" title="{{ file.error_message }}">info</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                <button type="button" onclick="openDeleteModal('{{ file.id }}', '{{ file.file_path|slice:"-30:" }}', '{{ file.file_type }}')" class="inline-flex items-center text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Hapus File & Bersihkan Data">
+                                    <span class="material-symbols-outlined text-[20px]">delete</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr id="row-empty">
+                            <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                                Belum ada file yang diunggah.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- MODAL CONFIRMATION POPUP FOR DELETE -->
+    <div id="delete-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700 transform transition-all scale-95 duration-200" id="modal-card">
+            <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-2xl">warning</span>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Konfirmasi Hapus File</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                        Apakah Anda yakin ingin menghapus file <strong id="modal-filename" class="text-gray-900 dark:text-white"></strong> (<span id="modal-filetype" class="font-semibold text-primary-600"></span>)?
+                    </p>
+                    <div class="mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-xs text-red-700 dark:text-red-300 space-y-1">
+                        <p class="font-semibold flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[15px]">info</span> Dampak Penghapusan:
+                        </p>
+                        <p id="modal-cascade-hint">Seluruh data jadwal penerbangan yang dibuat dari file ini akan dibersihkan dari database.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors">
+                    Batal
+                </button>
+                <button type="button" id="btn-confirm-delete" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">delete_forever</span>
+                    <span id="btn-delete-text">Ya, Hapus Data</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stepper & Deletion Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            let activeProjectId = null;
+            let targetFileToDelete = null;
+            
+            // Steps elements: Step 1 (WTT), Step 2 (PPRP), Step 3 (GHP)
+            const step1 = {
+                container: document.getElementById('step-1'),
+                overlay: document.getElementById('step-1').querySelector('.step-overlay'),
+                input: document.querySelector('#step-1 .file-input'),
+                btn: document.querySelector('#step-1 .btn-upload'),
+                form: document.getElementById('form-wtt'),
+                badge: document.getElementById('step-1-badge'),
+                progressArea: document.querySelector('#step-1 .progress-area'),
+                progressFill: document.querySelector('#step-1 .progress-bar-fill'),
+                progressLabel: document.querySelector('#step-1 .progress-label'),
+                resultNotif: document.querySelector('#step-1 .result-notification')
+            };
+            
+            const step2 = {
+                container: document.getElementById('step-2'),
+                overlay: document.getElementById('step-2').querySelector('.step-overlay'),
+                input: document.querySelector('#step-2 .file-input'),
+                btn: document.querySelector('#step-2 .btn-upload'),
+                btnSkip: document.getElementById('btn-skip'),
+                form: document.getElementById('form-pprp'),
+                badge: document.getElementById('step-2-badge'),
+                progressArea: document.querySelector('#step-2 .progress-area'),
+                progressFill: document.querySelector('#step-2 .progress-bar-fill'),
+                progressLabel: document.querySelector('#step-2 .progress-label'),
+                resultNotif: document.querySelector('#step-2 .result-notification')
+            };
+            
+            const step3 = {
+                container: document.getElementById('step-3'),
+                overlay: document.getElementById('step-3').querySelector('.step-overlay'),
+                input: document.querySelector('#step-3 .file-input'),
+                btn: document.querySelector('#step-3 .btn-upload'),
+                form: document.getElementById('form-ghp'),
+                badge: document.getElementById('step-3-badge'),
+                progressArea: document.querySelector('#step-3 .progress-area'),
+                progressFill: document.querySelector('#step-3 .progress-bar-fill'),
+                progressLabel: document.querySelector('#step-3 .progress-label'),
+                resultNotif: document.querySelector('#step-3 .result-notification')
+            };
+            
+            const overallSuccess = document.getElementById('overall-success');
+            const periodStatusText = document.getElementById('period-status-text');
+            const periodBadgeContainer = document.getElementById('period-badge-container');
+            const detectedPeriodText = document.getElementById('detected-period-text');
+            
+            // Modal elements
+            const deleteModal = document.getElementById('delete-modal');
+            const modalCard = document.getElementById('modal-card');
+            const modalFilename = document.getElementById('modal-filename');
+            const modalFiletype = document.getElementById('modal-filetype');
+            const modalCascadeHint = document.getElementById('modal-cascade-hint');
+            const btnConfirmDelete = document.getElementById('btn-confirm-delete');
+            const btnDeleteText = document.getElementById('btn-delete-text');
+
+            // Handle file input changes for UI feedback
+            document.querySelectorAll('.file-input').forEach(input => {
+                input.addEventListener('change', function() {
+                    const stepContainer = this.closest('[id^="step-"]');
+                    const display = stepContainer.querySelector('.file-name-display');
+                    const text = stepContainer.querySelector('.file-name-text');
+                    const dropZone = stepContainer.querySelector('.drop-zone');
+                    const btn = stepContainer.querySelector('.btn-upload');
+                    
+                    if (this.files && this.files.length > 0) {
+                        if (this.files.length === 1) {
+                            text.textContent = this.files[0].name;
+                        } else {
+                            text.textContent = this.files.length + ' files selected';
+                        }
+                        display.classList.remove('hidden');
+                        dropZone.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/10');
+                        btn.disabled = false;
+                    } else {
+                        display.classList.add('hidden');
+                        dropZone.classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/10');
+                        btn.disabled = true;
+                    }
+                });
+            });
+            
+            // Show inline notification
+            function showNotification(stepObj, type, message) {
+                const notif = stepObj.resultNotif;
+                notif.classList.remove('hidden');
+                
+                if (type === 'success') {
+                    notif.innerHTML = `
+                        <div class="flex items-start gap-2 p-3 rounded-lg bg-green-50 border border-green-200 dark:bg-green-900/20 dark:border-green-800/50">
+                            <span class="material-symbols-outlined text-green-600 dark:text-green-400 text-[18px] mt-0.5">check_circle</span>
+                            <p class="text-sm text-green-700 dark:text-green-300 font-medium">${message}</p>
+                        </div>`;
+                } else {
+                    notif.innerHTML = `
+                        <div class="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800/50">
+                            <span class="material-symbols-outlined text-red-600 dark:text-red-400 text-[18px] mt-0.5">error</span>
+                            <p class="text-sm text-red-700 dark:text-red-300 font-medium flex-1">${message}</p>
+                            <button type="button" onclick="this.closest('.result-notification').classList.add('hidden')" class="text-red-400 hover:text-red-600 dark:hover:text-red-300">
+                                <span class="material-symbols-outlined text-[16px]">close</span>
+                            </button>
+                        </div>`;
+                }
+            }
+            
+            // Show/update progress bar
+            function showProgress(stepObj, phase) {
+                const area = stepObj.progressArea;
+                const fill = stepObj.progressFill;
+                const label = stepObj.progressLabel;
+                
+                area.classList.remove('hidden');
+                fill.classList.remove('uploading', 'parsing', 'done', 'error');
+                
+                if (phase === 'uploading') {
+                    fill.classList.add('uploading');
+                    label.textContent = 'Mengunggah file...';
+                } else if (phase === 'parsing') {
+                    fill.classList.add('parsing');
+                    label.textContent = 'Mendeteksi periode & menyimpan data...';
+                } else if (phase === 'done') {
+                    fill.classList.add('done');
+                    label.textContent = 'Selesai!';
+                } else if (phase === 'error') {
+                    fill.classList.add('error');
+                    label.textContent = 'Gagal!';
+                }
+            }
+            
+            function hideProgress(stepObj) {
+                setTimeout(() => {
+                    stepObj.progressArea.classList.add('hidden');
+                }, 2000);
+            }
+            
+            // AJAX Upload function with Auto-Disable
+            async function uploadForm(stepObj, nextStepObj) {
+                const form = stepObj.form;
+                const btn = stepObj.btn;
+                const originalBtnHtml = btn.innerHTML;
+                
+                // Show uploading progress
+                btn.disabled = true;
+                btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span> <span class="btn-text">Processing...</span>';
+                showProgress(stepObj, 'uploading');
+                
+                const formData = new FormData(form);
+                if (activeProjectId) {
+                    formData.append('project_id', activeProjectId);
+                }
+                
+                try {
+                    setTimeout(() => showProgress(stepObj, 'parsing'), 600);
+                    
+                    const response = await fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        // Success
+                        showProgress(stepObj, 'done');
+                        hideProgress(stepObj);
+                        
+                        // Update active project details
+                        if (result.project_id) {
+                            activeProjectId = result.project_id;
+                            document.getElementById('pprp-project-id').value = activeProjectId;
+                            document.getElementById('ghp-project-id').value = activeProjectId;
+                            
+                            // Update banner
+                            periodStatusText.innerHTML = `Project Terdeteksi: <strong>${result.project_code}</strong> (${result.period_name})`;
+                            detectedPeriodText.textContent = result.period_name;
+                            periodBadgeContainer.classList.remove('hidden');
+                        }
+                        
+                        // Build contextual success notification
+                        const count = result.processed_count || 0;
+                        const detail = result.detail || 'records processed';
+                        showNotification(stepObj, 'success', `Berhasil! ${count} ${detail}.`);
+                        
+                        // AUTO-DISABLE THIS STEP CARD
+                        btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check_circle</span> <span class="btn-text">Completed</span>';
+                        btn.classList.remove('bg-blue-600', 'bg-purple-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-purple-700', 'hover:bg-orange-700');
+                        btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                        btn.disabled = true;
+                        stepObj.input.disabled = true;
+                        if (stepObj.btnSkip) stepObj.btnSkip.disabled = true;
+                        
+                        stepObj.badge.innerHTML = '<span class="material-symbols-outlined text-sm">check</span>';
+                        stepObj.badge.classList.remove('bg-blue-100', 'bg-purple-100', 'bg-orange-100', 'text-blue-600', 'text-purple-600', 'text-orange-600');
+                        stepObj.badge.classList.add('bg-green-100', 'text-green-600', 'dark:bg-green-900/30', 'dark:text-green-400');
+                        
+                        // Unlock next step
+                        if (nextStepObj) {
+                            unlockStep(nextStepObj);
+                        } else {
+                            // Finished Step 3
+                            overallSuccess.classList.remove('hidden');
+                        }
+                    } else {
+                        // Error
+                        showProgress(stepObj, 'error');
+                        hideProgress(stepObj);
+                        showNotification(stepObj, 'error', result.message || "Terjadi kesalahan saat upload.");
+                        btn.innerHTML = originalBtnHtml;
+                        btn.disabled = false;
+                    }
+                } catch (error) {
+                    showProgress(stepObj, 'error');
+                    hideProgress(stepObj);
+                    showNotification(stepObj, 'error', "Network error: " + error);
+                    btn.innerHTML = originalBtnHtml;
+                    btn.disabled = false;
+                }
+            }
+            
+            // Form Submits: Step 1 (WTT) -> Step 2 (PPRP) -> Step 3 (GHP)
+            step1.form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                uploadForm(step1, step2);
+            });
+            
+            step2.form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                uploadForm(step2, step3);
+            });
+            
+            step3.form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                uploadForm(step3, null); // Last step
+            });
+            
+            // Skip button on Step 2 (PPRP)
+            step2.btnSkip.addEventListener('click', function() {
+                step2.overlay.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+                step2.overlay.querySelector('p').textContent = 'Skipped';
+                step2.badge.innerHTML = '<span class="material-symbols-outlined text-sm">skip_next</span>';
+                step2.input.disabled = true;
+                step2.btn.disabled = true;
+                step2.btnSkip.disabled = true;
+                unlockStep(step3);
+            });
+            
+            // Helper: Unlock Step
+            function unlockStep(step) {
+                step.overlay.classList.add('opacity-0', 'pointer-events-none');
+                setTimeout(() => step.overlay.classList.add('hidden'), 300);
+                step.input.disabled = false;
+                if (step.btnSkip) step.btnSkip.disabled = false;
+            }
+            
+            // Helper: Lock Step
+            function lockStep(step, message) {
+                step.overlay.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+                if (message) step.overlay.querySelector('p').textContent = message;
+                step.input.disabled = true;
+                step.btn.disabled = true;
+                if (step.btnSkip) step.btnSkip.disabled = true;
+            }
+            
+            // Helper: Reset step back to default active state
+            function resetStep(step, stepNumber, type, colorClass, btnText) {
+                step.overlay.classList.add('hidden', 'opacity-0', 'pointer-events-none');
+                step.input.disabled = false;
+                step.input.value = '';
+                step.form.querySelector('.file-name-display').classList.add('hidden');
+                step.form.querySelector('.drop-zone').classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/10');
+                step.resultNotif.classList.add('hidden');
+                
+                step.btn.disabled = true;
+                if (step.btnSkip) {
+                    step.btn.className = `flex-1 flex justify-center items-center gap-1.5 py-2.5 px-4 shadow-sm text-xs font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none`;
+                } else {
+                    step.btn.className = `mt-4 w-full flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none`;
+                }
+                step.btn.style.backgroundColor = '#006b32';
+                step.btn.style.color = '#ffffff';
+                step.btn.innerHTML = `<span class="material-symbols-outlined text-[18px] btn-icon">cloud_upload</span> <span class="btn-text">${btnText}</span>`;
+                
+                step.badge.className = `w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300`;
+                step.badge.textContent = stepNumber;
+                
+                if (step.btnSkip) step.btnSkip.disabled = false;
+            }
+            
+            // Modal Open / Close Functions (global scope for onclick)
+            window.openDeleteModal = function(fileId, fileName, fileType) {
+                targetFileToDelete = { id: fileId, name: fileName, type: fileType };
+                modalFilename.textContent = fileName;
+                modalFiletype.textContent = fileType;
+                
+                if (fileType === 'WTT') {
+                    modalCascadeHint.textContent = 'Semua jadwal penerbangan baseline dan revisi PPRP terkait akan dihapus dari database.';
+                } else if (fileType === 'PPRP') {
+                    modalCascadeHint.textContent = 'Semua jadwal versi perubahan PPRP ini akan dihapus dari database (jadwal WTT tetap aman).';
+                } else if (fileType === 'GHP') {
+                    modalCascadeHint.textContent = 'Status realisasi terbang (OPERATED) pada jadwal project ini akan di-reset kembali ke UNVERIFIED.';
+                }
+                
+                deleteModal.classList.remove('hidden');
+                setTimeout(() => {
+                    deleteModal.classList.remove('opacity-0');
+                    modalCard.classList.remove('scale-95');
+                    modalCard.classList.add('scale-100');
+                }, 10);
+            };
+            
+            window.closeDeleteModal = function() {
+                deleteModal.classList.add('opacity-0');
+                modalCard.classList.remove('scale-100');
+                modalCard.classList.add('scale-95');
+                setTimeout(() => {
+                    deleteModal.classList.add('hidden');
+                    targetFileToDelete = null;
+                }, 200);
+            };
+            
+            // Modal Confirm Delete Action
+            btnConfirmDelete.addEventListener('click', async function() {
+                if (!targetFileToDelete) return;
+                
+                btnConfirmDelete.disabled = true;
+                btnDeleteText.textContent = 'Menghapus...';
+                
+                const formData = new FormData();
+                formData.append('action', 'delete');
+                formData.append('file_id', targetFileToDelete.id);
+                formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                
+                try {
+                    const response = await fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        // 1. Remove table row from DOM
+                        const row = document.getElementById(`row-file-${targetFileToDelete.id}`);
+                        if (row) {
+                            row.remove();
+                        }
+                        
+                        // 2. REACTIVE STEP UNLOCK
+                        if (result.deleted_file_type === 'WTT') {
+                            // Reset Step 1 (WTT) to active, lock Step 2 & 3
+                            resetStep(step1, 1, 'WTT', 'bg-blue-600', 'Upload WTT');
+                            lockStep(step2, 'Upload WTT terlebih dahulu');
+                            lockStep(step3, 'Upload PPRP atau lewati terlebih dahulu');
+                            activeProjectId = null;
+                            periodStatusText.innerHTML = 'Silakan upload file <strong>WTT (PDF)</strong> untuk memulai. Bulan & Tahun otomatis terdeteksi.';
+                            periodBadgeContainer.classList.add('hidden');
+                            overallSuccess.classList.add('hidden');
+                        } else if (result.deleted_file_type === 'PPRP') {
+                            resetStep(step2, 2, 'PPRP', 'bg-purple-600', 'Upload PPRP');
+                            unlockStep(step2);
+                        } else if (result.deleted_file_type === 'GHP') {
+                            resetStep(step3, 3, 'GHP', 'bg-orange-600', 'Upload GHP');
+                            unlockStep(step3);
+                            overallSuccess.classList.add('hidden');
+                        }
+                        
+                        closeDeleteModal();
+                    } else {
+                        alert(result.message || 'Gagal menghapus file.');
+                    }
+                } catch (error) {
+                    alert('Network error saat menghapus: ' + error);
+                } finally {
+                    btnConfirmDelete.disabled = false;
+                    btnDeleteText.textContent = 'Ya, Hapus Data';
+                }
+            });
+        });
+    </script>
+{% endblock %}
