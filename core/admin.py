@@ -32,7 +32,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.http import JsonResponse
 from django.core.files.storage import FileSystemStorage
-from core.report import get_project_report_data, generate_report
+from core.report import get_project_report_data, generate_report, generate_rekap_report
 
 
 @admin.register(Project)
@@ -66,6 +66,7 @@ class ProjectAdmin(ModelAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
+            path('download-rekap/', self.admin_site.admin_view(self.download_rekap_view), name='project_download_rekap'),
             path('<int:project_id>/download/', self.admin_site.admin_view(self.download_report), name='project_download'),
             path('<int:project_id>/upload-pprp/', self.admin_site.admin_view(self.upload_pprp_view), name='project_upload_pprp'),
             path('<int:project_id>/view-report/', self.admin_site.admin_view(self.view_report_view), name='project_view_report'),
@@ -166,6 +167,28 @@ class ProjectAdmin(ModelAdmin):
             return redirect(f'/admin/core/project/')
         except Exception as e:
             self.message_user(request, f"Gagal generate report: {e}", level='error')
+            from django.shortcuts import redirect
+            return redirect(f'/admin/core/project/')
+
+    def download_rekap_view(self, request):
+        import tempfile
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+                output_path = tmp.name
+            count = generate_rekap_report(output_path)
+            filename = f"Report_Rekap_Satu_Musim.xlsx"
+            response = FileResponse(
+                open(output_path, 'rb'),
+                as_attachment=True,
+                filename=filename
+            )
+            return response
+        except ValueError as e:
+            self.message_user(request, str(e), level='warning')
+            from django.shortcuts import redirect
+            return redirect(f'/admin/core/project/')
+        except Exception as e:
+            self.message_user(request, f"Gagal generate rekap: {e}", level='error')
             from django.shortcuts import redirect
             return redirect(f'/admin/core/project/')
 

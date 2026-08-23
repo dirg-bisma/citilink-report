@@ -225,5 +225,78 @@
                 }
             });
         });
+
+        // Kustomisasi Action Bar (Ubah dropdown Select Action menjadi Tombol Delete)
+        document.addEventListener('DOMContentLoaded', function() {
+            // Cari elemen select action tersembunyi/asli
+            const actionSelect = document.querySelector('select[name="action"]');
+            if (actionSelect) {
+                // Set default action to delete
+                actionSelect.value = 'delete_selected';
+                
+                // Di unfold, dropdown dibungkus dalam container komponen. Kita cari parent yang terlihat.
+                // Mencari elemen pembungkus dropdown (biasanya label atau div dengan relative)
+                const unfoldDropdownContainer = actionSelect.closest('.relative') || actionSelect.parentElement;
+                
+                if (unfoldDropdownContainer) {
+                    unfoldDropdownContainer.style.display = 'none';
+                }
+
+                // Cari container tempat menaruh tombol baru (baris bawah)
+                const actionBarContainer = unfoldDropdownContainer.parentElement;
+
+                if (actionBarContainer) {
+                    // Buat tombol delete dengan desain premium yang lebih elok
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.type = 'submit';
+                    deleteBtn.name = 'index'; // Memastikan form trigger submit action
+                    deleteBtn.value = '0';
+                    
+                    // Desain: Soft background secara default, menjadi solid saat dihover, dengan efek scale pada icon
+                    deleteBtn.className = 'group inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-600 hover:text-white hover:border-red-600 hover:shadow-md dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30 dark:hover:bg-red-600 dark:hover:text-white dark:hover:border-red-600 shadow-sm transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50 disabled:hover:text-red-600 disabled:hover:border-red-200 disabled:hover:shadow-sm disabled:dark:hover:bg-red-500/10 disabled:dark:hover:text-red-400 disabled:dark:hover:border-red-500/30 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:focus:ring-offset-gray-900 select-none cursor-pointer';
+                    
+                    deleteBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform duration-300">delete</span> <span class="tracking-wide">Hapus Terpilih</span>';
+                    deleteBtn.disabled = true;
+
+                    // Sisipkan tombol sebagai elemen pertama di action bar
+                    actionBarContainer.insertBefore(deleteBtn, actionBarContainer.firstChild);
+
+                    // Logic untuk enable/disable button
+                    const checkboxes = document.querySelectorAll('.action-select');
+                    const selectAllCb = document.getElementById('action-toggle');
+                    
+                    function updateBtnState() {
+                        const anyChecked = Array.from(document.querySelectorAll('.action-select')).some(cb => cb.checked);
+                        deleteBtn.disabled = !anyChecked;
+                    }
+
+                    checkboxes.forEach(cb => {
+                        cb.addEventListener('change', updateBtnState);
+                    });
+
+                    if (selectAllCb) {
+                        selectAllCb.addEventListener('change', function() {
+                            setTimeout(updateBtnState, 50);
+                        });
+                    }
+
+                    // Sembunyikan tombol action default Unfold jika ada (biasanya otomatis tersubmit atau ada icon button)
+                    const goBtn = document.querySelector('button[title="Run the selected action"], button[name="index"]');
+                    if (goBtn && goBtn !== deleteBtn) {
+                        goBtn.style.display = 'none';
+                    }
+                    
+                    updateBtnState();
+                }
+            }
+        });
     </script>
+{% endblock %}
+
+{% block object-tools-items %}
+    <a href="{% url 'admin:project_download_rekap' %}" class="inline-flex items-center justify-center gap-2 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important; text-decoration: none; margin-right: 0.5rem;" title="Download Rekapitulasi Laporan Seluruh Musim">
+        <span class="material-symbols-outlined text-[18px]">file_download</span>
+        Download Rekap
+    </a>
+    {{ block.super }}
 {% endblock %}

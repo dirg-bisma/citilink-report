@@ -630,6 +630,238 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
     return seq - 1  # Jumlah blok yang diisi
 
 
+def generate_rekap_report(output_path: str) -> int:
+    """
+    Menghasilkan laporan rekapitulasi satu musim penuh dengan menggabungkan 
+    data realisasi (1/0) dan perubahan PPRP dari SELURUH Project yang ada.
+    """
+    latest_project = Project.objects.order_by('-created_at').first()
+    if not latest_project:
+        raise ValueError("Belum ada data Project sama sekali di dalam sistem.")
+        
+    template_path = latest_project.template_path
+    if not template_path or not os.path.exists(template_path):
+        from django.conf import settings
+        static_template = os.path.join(settings.BASE_DIR, 'static', 'tpl', 'form_realisasi_winter26.xlsx')
+        if os.path.exists(static_template):
+            template_path = static_template
+        else:
+            raise FileNotFoundError("Template Excel tidak ditemukan untuk generate rekap.")
+
+    schedules = ScheduleVersion.objects.all().order_by('flight_number', 'version_number', 'flight_date')
+
+    flight_data = {}
+    for sv in schedules:
+        fn = _normalize_flight(sv.flight_number)
+        if fn not in flight_data:
+            flight_data[fn] = {
+                'flight_str': sv.flight_number,
+                'origin': sv.origin,
+                'destination': sv.destination,
+                'wtt': None,
+                'wtt_start_date': None,
+                'wtt_end_date': None,
+                'pprp_list': [],
+                'daily': {},
+            }
+
+        fd = flight_data[fn]
+        d = sv.flight_date
+
+        if sv.operational_flag:
+            fd['daily'][(d.year, d.month, d.day)] = 1
+        elif (d.year, d.month, d.day) not in fd['daily']:
+            fd['daily'][(d.year, d.month, d.day)] = 0
+
+        if sv.version_number == 1 and not sv.pprp_letter:
+            if fd['wtt_start_date'] is None or sv.flight_date < fd['wtt_start_date']:
+                fd['wtt_start_date'] = sv.flight_date
+            if fd['wtt_end_date'] is None or sv.flight_date > fd['wtt_end_date']:
+                fd['wtt_end_date'] = sv.flight_date
+            if not fd['wtt']:
+                fd['wtt'] = {
+                    'std': sv.std.strftime('%H:%M') if sv.std else None,
+                    'sta': sv.sta.strftime('%H:%M') if sv.sta else None,
+                    'atd': sv.atd.strftime('%H:%M') if sv.atd else None,
+                    'ata': sv.ata.strftime('%H:%M') if sv.ata else None,
+                }
+        elif sv.pprp_letter:
+            existing_letters = [p['pprp_letter'] for p in fd['pprp_list']]
+            if sv.pprp_letter not in existing_letters:
+                fd['pprp_list'].append({
+                    'pprp_letter': sv.pprp_letter,
+                    'pprp_date': sv.pprp_date,
+                    'periode': '',
+                    'std': sv.std.strftime('%H:%M') if sv.std else None,
+                    'sta': sv.sta.strftime('%H:%M') if sv.sta else None,
+                    'atd': sv.atd.strftime('%H:%M') if sv.atd else None,
+                    'ata': sv.ata.strftime('%H:%M') if sv.ata else None,
+                })
+
+    for fn, fd in flight_data.items():
+        wtt_start = fd.get('wtt_start_date')
+        wtt_end = fd.get('wtt_end_date')
+        for pprp in fd['pprp_list']:
+            d_pprp = pprp.get('pprp_date')
+            if not d_pprp:
+                continue
+            import datetime as _dt
+            semula_end = d_pprp - _dt.timedelta(days=1)
+            if wtt_start:
+                pprp['periode_semula'] = f"{wtt_start.day} {MONTH_ABBR[wtt_start.month]} {wtt_start.year}/{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
+            else:
+                pprp['periode_semula'] = ''
+            if wtt_end:
+                pprp['periode'] = f"{d_pprp.day} {MONTH_ABBR[d_pprp.month]} {d_pprp.year}/{wtt_end.day} {MONTH_ABBR[wtt_end.month]} {wtt_end.year}"
+
+    wb = load_workbook(template_path)
+    ws = wb.active
+
+    cols, month_col_map = _detect_columns(ws)
+    col_flight = cols['flight']
+
+    headers = _find_flight_headers(ws, col_flight)
+    if not headers:
+        raise RuntimeError("Tidak ada blok flight ditemukan di template.")
+
+    for i in reversed(range(len(headers))):
+        row_start, flight_norm, flight_str = headers[i]
+        fd = flight_data.get(flight_norm)
+        if not fd:
+            continue
+
+        if fd.get('wtt'):
+            if cols.get('atd') and fd['wtt'].get('atd'):
+                ws.cell(row_start, cols['atd']).value = fd['wtt']['atd']
+            if cols.get('ata') and fd['wtt'].get('ata'):
+                ws.cell(row_start, cols['ata']).value = fd['wtt']['ata']
+
+        if cols.get('tipe'):
+            target_row = row_start
+            for rng in ws.merged_cells.ranges:
+                if (rng.min_col <= cols['tipe'] <= rng.max_col and rng.min_row <= row_start <= rng.max_row):
+                    target_row = rng.min_row
+                    break
+            cell = ws.cell(target_row, cols['tipe'])
+            if type(cell).__name__ != 'MergedCell':
+                cell.value = 'Perpanjangan'
+
+        if not fd['pprp_list']:
+            continue
+
+        next_row = headers[i + 1][0] if i + 1 < len(headers) else None
+        row_end = _block_end(ws, row_start, next_row, ws.max_row)
+        block_len = row_end - row_start + 1
+
+        for pprp in reversed(fd['pprp_list']):
+            if cols.get('periode') and pprp.get('periode_semula'):
+                periode_col = cols['periode']
+                target_row = row_start
+                for rng in ws.merged_cells.ranges:
+                    if (rng.min_col <= periode_col <= rng.max_col and rng.min_row <= row_start <= rng.max_row):
+                        target_row = rng.min_row
+                        break
+                cell = ws.cell(target_row, periode_col)
+                if type(cell).__name__ != 'MergedCell':
+                    cell.value = pprp['periode_semula']
+
+            insert_at = row_end + 1
+            ws.insert_rows(insert_at, block_len)
+            _shift_merged_ranges_below(ws, insert_at, block_len)
+            _shift_formulas_below(ws, insert_at, block_len)
+
+            for offset in range(block_len):
+                _copy_row(ws, row_start + offset, insert_at + offset)
+            _copy_merged_ranges_for_block(ws, row_start, insert_at, block_len)
+
+            top_row = insert_at
+            ws.cell(top_row, cols['no']).value = None
+            if cols.get('periode') and pprp['periode']:
+                ws.cell(top_row, cols['periode']).value = pprp['periode']
+            if cols.get('surat') and pprp['pprp_letter']:
+                ws.cell(top_row, cols['surat']).value = pprp['pprp_letter']
+            if cols.get('tipe'):
+                ws.cell(top_row, cols['tipe']).value = 'Perubahan'
+            if cols.get('etd') and pprp['std']:
+                ws.cell(top_row, cols['etd']).value = pprp['std']
+            if cols.get('eta') and pprp['sta']:
+                ws.cell(top_row, cols['eta']).value = pprp['sta']
+            if cols.get('atd') and pprp['atd']:
+                ws.cell(top_row, cols['atd']).value = pprp['atd']
+            if cols.get('ata') and pprp['ata']:
+                ws.cell(top_row, cols['ata']).value = pprp['ata']
+                
+            if cols.get('day_start') and month_col_map:
+                latest_year = latest_project.year
+                for m_num, m_col_start in month_col_map.items():
+                    days_in_month = calendar.monthrange(latest_year, m_num)[1]
+                    for offset in range(block_len):
+                        for day_col in range(m_col_start, m_col_start + days_in_month):
+                            ws.cell(insert_at + offset, day_col).value = None
+
+            row_end = insert_at + block_len - 1
+
+    headers = _find_flight_headers(ws, col_flight)
+
+    latest_year = latest_project.year
+    for i, (row_start, flight_norm, flight_str) in enumerate(headers):
+        fd = flight_data.get(flight_norm)
+        if not fd or not fd['daily']:
+            continue
+
+        next_row = headers[i + 1][0] if i + 1 < len(headers) else None
+        row_end = _block_end(ws, row_start, next_row, ws.max_row)
+
+        day_start_col = cols.get('day_start')
+        bulan_tahun_col = cols.get('bulan_tahun', 13)
+        if not day_start_col:
+            continue
+
+        for r in range(row_start, row_end + 1):
+            bln_val = ws.cell(r, bulan_tahun_col).value
+            if not bln_val:
+                continue
+                
+            m_num = None
+            if isinstance(bln_val, (datetime.datetime, datetime.date)):
+                m_num = bln_val.month
+            else:
+                bln_str = str(bln_val).strip().lower()
+                for num, name in INDONESIAN_MONTHS.items():
+                    if name.lower()[:3] in bln_str or MONTH_ABBR[num].lower() in bln_str:
+                        m_num = num
+                        break
+            
+            if not m_num:
+                continue
+                
+            days_in_month = calendar.monthrange(latest_year, m_num)[1]
+            for day in range(1, days_in_month + 1):
+                day_col = day_start_col + (day - 1)
+                flag = fd['daily'].get((latest_year, m_num, day), 0)
+                cell = ws.cell(r, day_col)
+                if type(cell).__name__ != 'MergedCell':
+                    cell.value = flag
+
+    seq = 1
+    for row_start, flight_norm, flight_str in _find_flight_headers(ws, col_flight):
+        cell = ws.cell(row_start, cols['no'])
+        if type(cell).__name__ != 'MergedCell':
+            cell.value = seq
+        seq += 1
+
+    now = datetime.datetime.now()
+    tgl_sekarang = f"Surabaya, {INDONESIAN_MONTHS.get(now.month, 'Januari')} {now.year}"
+    for r in range(ws.max_row, max(1, ws.max_row - 100), -1):
+        for c in range(1, ws.max_column + 1):
+            val = ws.cell(r, c).value
+            if val and isinstance(val, str) and 'Surabaya' in val:
+                ws.cell(r, c).value = tgl_sekarang
+
+    wb.save(output_path)
+    return seq - 1
+
+
 def load_template_flight_metadata(template_path: str = None) -> dict:
     """
     Ekstrak metadata baseline per flight dari template Excel resmi:

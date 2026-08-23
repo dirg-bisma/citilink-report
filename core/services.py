@@ -171,8 +171,18 @@ def process_pprp(project_id: int, pprp_file_id: int):
 
 
 
+def parse_time_str(time_str: str):
+    if not time_str:
+        return None
+    import re, datetime
+    m = re.search(r'(\d{1,2}):(\d{2})', str(time_str))
+    if m:
+        return datetime.time(int(m.group(1)), int(m.group(2)))
+    return None
+
+
 def process_ghp(project_id: int, ghp_file_id: int):
-    """Match GHP to active schedules, set operational flag"""
+    """Match GHP to active schedules, set operational flag and update actual times (atd)"""
     project = Project.objects.get(id=project_id)
     ghp_file = SourceFile.objects.get(id=ghp_file_id)
     
@@ -191,6 +201,12 @@ def process_ghp(project_id: int, ghp_file_id: int):
             
             if schedule:
                 schedule.operational_flag = True
+                if rec.get('atd'):
+                    parsed_atd = parse_time_str(rec['atd'])
+                    if parsed_atd:
+                        schedule.atd = parsed_atd
+                if 'delay_code' in rec and rec['delay_code']:
+                    schedule.delay_code = rec['delay_code']
                 schedule.save()
                 matched += 1
     

@@ -4,7 +4,7 @@
 {% block breadcrumbs %}{% endblock %}
 
 {% block title %}
-    {% trans 'Dashboard' %} | {{ site_title|default:_('Django site admin') }}
+    {% trans 'OTP Dashboard | Station A Class SUB' %} | {{ site_title|default:_('Django site admin') }}
 {% endblock %}
 
 {% block branding %}
@@ -18,47 +18,670 @@
 {% block content %}
     {% include "unfold/helpers/messages.html" %}
 
-    <div class="flex flex-col gap-8">
-        <!-- Header Section -->
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Citilink FSRS Dashboard</h1>
-            <p class="text-gray-500 dark:text-gray-400">Automated Flight Schedule Reporting System overview.</p>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* PowerBI Executive Dark Theme Styles */
+        .pbi-body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            border-radius: 1rem;
+            padding: 1.5rem;
+        }
+
+        .pbi-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            transition: all 0.25s ease;
+        }
+        .pbi-card:hover {
+            border-color: #475569;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .pbi-kpi-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+        }
+
+        .pbi-kpi-val {
+            font-size: 1.875rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-top: 0.35rem;
+        }
+
+        .pbi-badge-reg {
+            background-color: rgba(14, 165, 233, 0.15);
+            color: #38bdf8;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .pbi-badge-chrt {
+            background-color: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+
+        .pbi-chart-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .pbi-select, .pbi-select-sm {
+            appearance: none;
+            background-color: #1e293b;
+            border: 1px solid #475569;
+            color: #f8fafc;
+            border-radius: 0.5rem;
+            padding: 0.5rem 2.25rem 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='%2338bdf8'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1.25rem;
+        }
+
+        .pbi-select-sm {
+            padding: 0.35rem 1.75rem 0.35rem 0.75rem;
+            font-size: 0.75rem;
+            border-radius: 0.375rem;
+            background-size: 1rem;
+            background-position: right 0.5rem center;
+        }
+
+        /* Fix native browser option dropdown popup styling */
+        select option {
+            background-color: #1e293b !important;
+            color: #f8fafc !important;
+            padding: 8px;
+        }
+
+        .chart-box {
+            position: relative;
+            width: 100%;
+            height: 280px;
+        }
+
+        .empty-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #64748b;
+            text-align: center;
+        }
+
+        .spinner-loader {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #334155;
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+
+    <div class="pbi-body space-y-6">
+        
+        <!-- Header & Filter Row -->
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-700/60 pb-5">
+            <div>
+                <div class="flex items-center gap-3">
+                    <div class="bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/20">
+                        <span class="material-symbols-outlined text-cyan-400 text-2xl">flight_takeoff</span>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-black text-white tracking-tight">OTP Dashboard | Station A Class SUB</h1>
+                        <p class="text-xs font-semibold text-slate-400">Automated Flight Schedule Reporting System • Real-Time Analytics</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Project & Date Selectors -->
+            <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-2">
+                    <label for="projectSelector" class="text-xs font-bold text-slate-400 uppercase tracking-wider">Project:</label>
+                    <select id="projectSelector" class="pbi-select focus:ring-2 focus:ring-cyan-500 outline-none">
+                        <option value="">Memuat Project...</option>
+                    </select>
+                </div>
+
+                <!-- Date Range Filter Bar -->
+                <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg shadow-sm">
+                    <span class="material-symbols-outlined text-cyan-400 text-base">calendar_month</span>
+                    <label for="startDaySelect" class="text-xs font-bold text-slate-300">Tgl:</label>
+                    <select id="startDaySelect" class="pbi-select-sm focus:ring-1 focus:ring-cyan-400 outline-none">
+                        <option value="">Awal (Tgl 01)</option>
+                        {% for d in "x"|rjust:"31" %}
+                        <option value="{{ forloop.counter }}">Tgl {{ forloop.counter|stringformat:"02d" }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="text-slate-500 text-xs font-extrabold">s/d</span>
+                    <select id="endDaySelect" class="pbi-select-sm focus:ring-1 focus:ring-cyan-400 outline-none">
+                        <option value="">Akhir (Tgl 31)</option>
+                        {% for d in "x"|rjust:"31" %}
+                        <option value="{{ forloop.counter }}">Tgl {{ forloop.counter|stringformat:"02d" }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <span id="loadingIndicator" class="spinner-loader" style="display: none;"></span>
+            </div>
         </div>
 
-        <!-- Quick Metrics -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Flight Schedules</span>
-                <div class="flex items-end gap-3">
-                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">842</span>
-                    <span class="text-sm font-medium text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded-full">Active</span>
+        <!-- KPI Cards Row (7 Executive Cards) -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            
+            <!-- 1. Total Flights -->
+            <div class="pbi-card">
+                <p class="pbi-kpi-title">Flights</p>
+                <h3 class="pbi-kpi-val text-white" id="valFlights">-</h3>
+                <div class="mt-2 flex items-center gap-1 flex-wrap">
+                    <span class="pbi-badge-reg" id="badgeReg">REG: -</span>
+                    <span class="pbi-badge-chrt" id="badgeChrt">CHRT: -</span>
                 </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Projects</span>
-                <div class="flex items-end gap-3">
-                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">12</span>
-                </div>
+            <!-- 2. Delay -->
+            <div class="pbi-card">
+                <p class="pbi-kpi-title">Delay</p>
+                <h3 class="pbi-kpi-val text-rose-500" id="valDelay">-</h3>
+                <p class="text-[0.7rem] text-slate-400 mt-2 font-medium">Terlambat > 15 min</p>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Pending Files</span>
-                <div class="flex items-end gap-3">
-                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">3</span>
-                    <span class="text-sm font-medium text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 rounded-full">Requires action</span>
-                </div>
+            <!-- 3. On Time -->
+            <div class="pbi-card">
+                <p class="pbi-kpi-title">On Time</p>
+                <h3 class="pbi-kpi-val text-emerald-400" id="valOnTime">-</h3>
+                <p class="text-[0.7rem] text-slate-400 mt-2 font-medium">Tepat Waktu</p>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">System Users</span>
-                <div class="flex items-end gap-3">
-                    <span class="text-3xl font-bold text-gray-900 dark:text-gray-100">42</span>
-                    <span class="text-sm font-medium text-gray-600 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">Registered</span>
-                </div>
+            <!-- 4. Avg AGT -->
+            <div class="pbi-card">
+                <p class="pbi-kpi-title">Average AGT</p>
+                <h3 class="pbi-kpi-val text-cyan-400" id="valAvgAgt">-</h3>
+                <p class="text-[0.7rem] text-slate-400 mt-2 font-medium">Actual Ground Time</p>
             </div>
+
+            <!-- 5. Avg SGT -->
+            <div class="pbi-card">
+                <p class="pbi-kpi-title">Average SGT</p>
+                <h3 class="pbi-kpi-val text-sky-400" id="valAvgSgt">-</h3>
+                <p class="text-[0.7rem] text-slate-400 mt-2 font-medium">Sched. Ground Time</p>
+            </div>
+
+            <!-- 6. OTP Dep -->
+            <div class="pbi-card bg-slate-800/90 border-emerald-500/30">
+                <p class="pbi-kpi-title text-emerald-400">OTP Dep</p>
+                <h3 class="pbi-kpi-val text-emerald-400" id="valOtpDep">-%</h3>
+                <p class="text-[0.7rem] text-emerald-500/80 mt-2 font-medium">Keberangkatan</p>
+            </div>
+
+            <!-- 7. OTP Arr -->
+            <div class="pbi-card bg-slate-800/90 border-teal-500/30">
+                <p class="pbi-kpi-title text-teal-400">OTP Arr</p>
+                <h3 class="pbi-kpi-val text-teal-400" id="valOtpArr">-%</h3>
+                <p class="text-[0.7rem] text-teal-500/80 mt-2 font-medium">Kedatangan</p>
+            </div>
+
         </div>
 
+        <!-- Grid 4 Charts (PowerBI Layout) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            
+            <!-- Chart 1: Daily OTP Trend (Target vs Actual) -->
+            <div class="pbi-card">
+                <div class="pbi-chart-title">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-cyan-400 text-xl">show_chart</span>
+                        <span>On Time Performance Target vs Actual (Harian)</span>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-400">Target Line: 90%</span>
+                </div>
+                <div class="chart-box" id="dailyTrendContainer">
+                    <canvas id="dailyTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Total Delay Time in Hours by Delay Reason -->
+            <div class="pbi-card">
+                <div class="pbi-chart-title">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-amber-400 text-xl">schedule</span>
+                        <span>Total Delay Time in Hours by Delay Reason</span>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-400">Durasi Jam:Menit</span>
+                </div>
+                <div class="chart-box" id="delayDurationContainer">
+                    <canvas id="delayDurationChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: IATA Delay Category Breakdown (Donut) -->
+            <div class="pbi-card">
+                <div class="pbi-chart-title">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-400 text-xl">pie_chart</span>
+                        <span>Kategori Delay Breakdown (IATA Standard)</span>
+                    </div>
+                </div>
+                <div class="chart-box flex items-center justify-center" id="iataDonutContainer">
+                    <canvas id="iataDonutChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: Delay Case Count by Category by Delay Reason -->
+            <div class="pbi-card">
+                <div class="pbi-chart-title">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-rose-400 text-xl">bar_chart</span>
+                        <span>Delay Case Count by Category by Delay Reason</span>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-400">Frekuensi Kasus</span>
+                </div>
+                <div class="chart-box" id="delayCaseContainer">
+                    <canvas id="delayCaseChart"></canvas>
+                </div>
+            </div>
+
+        </div>
 
     </div>
+
+    <script>
+    (function() {
+        const API_URL = '/admin/api/dashboard/';
+        const selector = document.getElementById('projectSelector');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        let dailyTrendInstance = null;
+        let delayDurationInstance = null;
+        let iataDonutInstance = null;
+        let delayCaseInstance = null;
+
+        // Chart Defaults for Dark Theme
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.color = '#94a3b8';
+
+        function showLoading(show) {
+            loadingIndicator.style.display = show ? 'inline-block' : 'none';
+        }
+
+        function updateKPIs(data) {
+            document.getElementById('valFlights').textContent = data.otp.total.toLocaleString();
+            document.getElementById('badgeReg').textContent = `REG: ${data.otp.reg_count}`;
+            document.getElementById('badgeChrt').textContent = `CHRT/XTRA: ${data.otp.chrt_count}`;
+            document.getElementById('valDelay').textContent = data.otp.delayed.toLocaleString();
+            document.getElementById('valOnTime').textContent = data.otp.on_time.toLocaleString();
+            document.getElementById('valAvgAgt').textContent = data.otp.avg_agt;
+            document.getElementById('valAvgSgt').textContent = data.otp.avg_sgt;
+            document.getElementById('valOtpDep').textContent = data.otp.otp_percent + '%';
+            document.getElementById('valOtpArr').textContent = data.otp.otp_arr_percent + '%';
+        }
+
+        // 1. Daily OTP Trend Chart (Combo Line + Bar)
+        function renderDailyTrendChart(dailyData) {
+            const container = document.getElementById('dailyTrendContainer');
+            const canvas = document.getElementById('dailyTrendChart');
+
+            if (dailyTrendInstance) {
+                dailyTrendInstance.destroy();
+                dailyTrendInstance = null;
+            }
+
+            if (!dailyData || dailyData.length === 0) {
+                canvas.style.display = 'none';
+                let empty = container.querySelector('.empty-placeholder');
+                if (!empty) {
+                    empty = document.createElement('div');
+                    empty.className = 'empty-placeholder';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">show_chart</span><p class="text-xs">Belum ada data harian.</p>';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+
+            const empty = container.querySelector('.empty-placeholder');
+            if (empty) empty.remove();
+            canvas.style.display = 'block';
+
+            const labels = dailyData.map(d => d.date);
+            const flightCounts = dailyData.map(d => d.total);
+            const otpPcts = dailyData.map(d => d.otp_percent);
+            const targetLines = dailyData.map(() => 90); // 90% Target Line
+
+            const ctx = canvas.getContext('2d');
+            dailyTrendInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: 'OTP Dep %',
+                            data: otpPcts,
+                            borderColor: '#38bdf8', // Cyan
+                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                            borderWidth: 2.5,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            pointBackgroundColor: '#38bdf8',
+                            yAxisID: 'yOTP',
+                            tension: 0.2
+                        },
+                        {
+                            type: 'line',
+                            label: 'Target (90%)',
+                            data: targetLines,
+                            borderColor: '#f43f5e', // Red Target Line
+                            borderWidth: 1.5,
+                            borderDash: [4, 4],
+                            pointRadius: 0,
+                            yAxisID: 'yOTP',
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Flights',
+                            data: flightCounts,
+                            backgroundColor: 'rgba(51, 65, 85, 0.7)',
+                            hoverBackgroundColor: 'rgba(71, 85, 105, 0.9)',
+                            borderRadius: 4,
+                            barThickness: 14,
+                            yAxisID: 'yFlights',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+                        tooltip: { backgroundColor: '#0f172a', titleFont: { weight: '700' } }
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        yOTP: {
+                            type: 'linear',
+                            position: 'right',
+                            min: 0, max: 100,
+                            ticks: { callback: v => v + '%' },
+                            grid: { color: 'rgba(51, 65, 85, 0.3)' }
+                        },
+                        yFlights: {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. Total Delay Time in Hours Chart
+        function renderDelayDurationChart(durations) {
+            const container = document.getElementById('delayDurationContainer');
+            const canvas = document.getElementById('delayDurationChart');
+
+            if (delayDurationInstance) {
+                delayDurationInstance.destroy();
+                delayDurationInstance = null;
+            }
+
+            if (!durations || durations.length === 0) {
+                canvas.style.display = 'none';
+                let empty = container.querySelector('.empty-placeholder');
+                if (!empty) {
+                    empty = document.createElement('div');
+                    empty.className = 'empty-placeholder';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">schedule</span><p class="text-xs">Data durasi delay belum tersedia.</p>';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+
+            const empty = container.querySelector('.empty-placeholder');
+            if (empty) empty.remove();
+            canvas.style.display = 'block';
+
+            const labels = durations.map(d => d.code);
+            const minutes = durations.map(d => d.minutes);
+            const durationStrings = durations.map(d => d.duration_str);
+
+            const ctx = canvas.getContext('2d');
+            delayDurationInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Durasi Delay (Menit)',
+                        data: minutes,
+                        backgroundColor: '#2dd4bf', // Teal
+                        borderRadius: 4,
+                        barThickness: 16,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` Durasi: ${durationStrings[context.dataIndex]} (HH:MM)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { callback: v => Math.round(v/60) + ' j' } },
+                        y: { grid: { display: false }, ticks: { font: { size: 11, weight: '600' } } }
+                    }
+                }
+            });
+        }
+
+        // 3. IATA Donut Chart
+        function renderIataDonutChart(categories) {
+            const container = document.getElementById('iataDonutContainer');
+            const canvas = document.getElementById('iataDonutChart');
+
+            if (iataDonutInstance) {
+                iataDonutInstance.destroy();
+                iataDonutInstance = null;
+            }
+
+            if (!categories || categories.length === 0) {
+                canvas.style.display = 'none';
+                let empty = container.querySelector('.empty-placeholder');
+                if (!empty) {
+                    empty = document.createElement('div');
+                    empty.className = 'empty-placeholder';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">pie_chart</span><p class="text-xs">Kategori IATA belum tersedia.</p>';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+
+            const empty = container.querySelector('.empty-placeholder');
+            if (empty) empty.remove();
+            canvas.style.display = 'block';
+
+            const labels = categories.map(c => c.category);
+            const pcts = categories.map(c => c.percentage);
+            const palette = ['#00b4d8', '#f59e0b', '#3b82f6', '#10b981', '#64748b'];
+
+            const ctx = canvas.getContext('2d');
+            iataDonutInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: pcts,
+                        backgroundColor: palette,
+                        borderWidth: 0,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '68%',
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { size: 11, weight: '600' }, usePointStyle: true, boxWidth: 8 } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ${ctx.label}: ${ctx.parsed}%`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 4. Delay Case Count Chart
+        function renderDelayCaseChart(cases) {
+            const container = document.getElementById('delayCaseContainer');
+            const canvas = document.getElementById('delayCaseChart');
+
+            if (delayCaseInstance) {
+                delayCaseInstance.destroy();
+                delayCaseInstance = null;
+            }
+
+            if (!cases || cases.length === 0) {
+                canvas.style.display = 'none';
+                let empty = container.querySelector('.empty-placeholder');
+                if (!empty) {
+                    empty = document.createElement('div');
+                    empty.className = 'empty-placeholder';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">bar_chart</span><p class="text-xs">Data kasus delay belum tersedia.</p>';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+
+            const empty = container.querySelector('.empty-placeholder');
+            if (empty) empty.remove();
+            canvas.style.display = 'block';
+
+            const labels = cases.map(c => c.code);
+            const counts = cases.map(c => c.count);
+
+            const ctx = canvas.getContext('2d');
+            delayCaseInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Jumlah Kasus',
+                        data: counts,
+                        backgroundColor: '#38bdf8', // Light Cyan
+                        borderRadius: 4,
+                        barThickness: 16,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { precision: 0 } },
+                        y: { grid: { display: false }, ticks: { font: { size: 11, weight: '600' } } }
+                    }
+                }
+            });
+        }
+
+        const startDaySelect = document.getElementById('startDaySelect');
+        const endDaySelect = document.getElementById('endDaySelect');
+
+        function fetchDashboard() {
+            showLoading(true);
+            const projectId = selector.value;
+            const startDay = startDaySelect.value;
+            const endDay = endDaySelect.value;
+
+            let url = API_URL;
+            const params = new URLSearchParams();
+            if (projectId) params.append('project_id', projectId);
+            if (startDay) params.append('start_day', startDay);
+            if (endDay) params.append('end_day', endDay);
+
+            const queryString = params.toString();
+            if (queryString) url += '?' + queryString;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    // Populate selector
+                    if (selector.options.length <= 1 || selector.options[0].text.includes('Memuat')) {
+                        selector.innerHTML = '';
+                        if (data.projects.length === 0) {
+                            selector.innerHTML = '<option value="">Belum ada project</option>';
+                        } else {
+                            data.projects.forEach(p => {
+                                const opt = document.createElement('option');
+                                opt.value = p.id;
+                                opt.textContent = p.label;
+                                if (p.id === data.selected_project_id) opt.selected = true;
+                                selector.appendChild(opt);
+                            });
+                        }
+                    }
+
+                    updateKPIs(data);
+                    renderDailyTrendChart(data.daily_trend);
+                    renderDelayDurationChart(data.delay_data.durations);
+                    renderIataDonutChart(data.delay_data.iata_categories);
+                    renderDelayCaseChart(data.delay_data.case_counts);
+                })
+                .catch(err => {
+                    console.error('Dashboard API Error:', err);
+                })
+                .finally(() => {
+                    showLoading(false);
+                });
+        }
+
+        selector.addEventListener('change', fetchDashboard);
+        startDaySelect.addEventListener('change', fetchDashboard);
+        endDaySelect.addEventListener('change', fetchDashboard);
+
+        // Initial Load
+        fetchDashboard();
+    })();
+    </script>
 {% endblock %}

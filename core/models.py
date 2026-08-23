@@ -78,6 +78,7 @@ class ScheduleVersion(models.Model):
     
     # Operational flag (from GHP match)
     operational_flag = models.BooleanField(default=False)  # 1 or 0
+    delay_code = models.CharField(max_length=50, blank=True, null=True)
     
     # Audit
     source_wtt = models.ForeignKey(SourceFile, null=True, on_delete=models.SET_NULL, related_name='wtt_schedules')

@@ -82,6 +82,7 @@ def parse_ghp(excel_path: str) -> List[Dict]:
                 'std': str(std) if pd.notna(std) else '',
                 'atd': str(atd) if pd.notna(atd) else '',
                 'aircraft': str(aircraft) if pd.notna(aircraft) else '',
+                'delay_code': str(row[14]) if len(row) > 14 and pd.notna(row[14]) else '',
             })
     
     return records

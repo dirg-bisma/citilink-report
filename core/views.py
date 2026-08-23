@@ -188,3 +188,72 @@ def upload_source_file_view(request):
         'title': 'Upload Data'
     })
     return render(request, 'admin/core/sourcefile/custom_upload.html', context)
+
+
+@staff_member_required
+def global_dashboard_api(request):
+    """API endpoint for global dashboard - returns analytics data for a given project and optional date range."""
+    from core.analytics import otp_metric, pprp_achievement, delay_factors, daily_otp_trend
+
+    project_id = request.GET.get('project_id')
+    start_day_raw = request.GET.get('start_day')
+    end_day_raw = request.GET.get('end_day')
+
+    start_day = int(start_day_raw) if start_day_raw and start_day_raw.isdigit() else None
+    end_day = int(end_day_raw) if end_day_raw and end_day_raw.isdigit() else None
+
+    # Build project list
+    projects = Project.objects.all().order_by('-year', '-month')
+    project_list = []
+    for p in projects:
+        project_list.append({
+            'id': p.id,
+            'project_id': p.project_id,
+            'period': p.period,
+            'year': p.year,
+            'month': p.month,
+            'label': f"{p.project_id} ({MONTH_NAMES.get(p.month, p.month)} {p.year})",
+        })
+
+    # If no project_id specified, pick the most recent project that has active schedules
+    if not project_id and project_list:
+        project_with_data = Project.objects.filter(schedules__isnull=False, schedules__origin='SUB').order_by('-year', '-month').first()
+        if project_with_data:
+            project_id = project_with_data.id
+        else:
+            project_id = project_list[0]['id']
+    elif project_id:
+        project_id = int(project_id)
+
+    # Compute analytics
+    otp_data = {'total': 0, 'reg_count': 0, 'chrt_count': 0, 'on_time': 0, 'delayed': 0, 'otp_percent': 0, 'otp_arr_percent': 0, 'avg_agt': '1:45', 'avg_sgt': '1:30'}
+    pprp_data = {'achievement': 0, 'total': 0, 'on_time': 0}
+    delay_data = {'case_counts': [], 'durations': [], 'iata_categories': []}
+    daily_trend = []
+
+    if project_id:
+        try:
+            project = Project.objects.get(id=project_id)
+            otp_data = otp_metric(project_id, start_day, end_day)
+            pprp_data = pprp_achievement(project_id, project.month, start_day, end_day)
+            delay_data = delay_factors(project_id, start_day, end_day)
+            daily_trend = daily_otp_trend(project_id, start_day, end_day)
+        except Project.DoesNotExist:
+            pass
+
+    pprp_out = pprp_data['total'] - pprp_data['on_time']
+
+    return JsonResponse({
+        'projects': project_list,
+        'selected_project_id': project_id,
+        'start_day': start_day,
+        'end_day': end_day,
+        'otp': otp_data,
+        'pprp': {
+            **pprp_data,
+            'out_of_tolerance': pprp_out,
+        },
+        'delay_data': delay_data,
+        'daily_trend': daily_trend,
+    })
+
