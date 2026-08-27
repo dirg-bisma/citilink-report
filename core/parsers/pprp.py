@@ -86,17 +86,12 @@ def parse_pprp(pdf_path: str) -> Dict:
         if first_word.lower() in ['perubahan', 'perpanjangan', 'penambahan', 'pengurangan', 'pencabutan']:
             submission_type = first_word.capitalize()
 
-    # --- 2. Isolasi bagian MENJADI ---
+    # --- 2. Isolasi bagian MENJADI (atau seluruh teks untuk PDF Penetapan Rute Baru) ---
     menjadi_idx = full_text.rfind('MENJADI')
-    if menjadi_idx == -1:
-        return {
-            'letter_number': letter_number,
-            'submission_type': submission_type,
-            'pprp_date': None,
-            'flights': [],
-        }
-
-    menjadi_text = full_text[menjadi_idx:]
+    if menjadi_idx != -1:
+        menjadi_text = full_text[menjadi_idx:]
+    else:
+        menjadi_text = full_text
 
     # --- 3. Parse setiap baris flight dari MENJADI ---
     flight_pattern = re.compile(

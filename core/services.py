@@ -68,10 +68,10 @@ def process_wtt(project_id: int, wtt_file_id: int):
                 destination=rec['destination'],
                 flight_date=rec['flight_date'],
                 aircraft=rec['aircraft'],
-                std=rec['std'],
-                sta=rec['sta'],
-                atd=rec['atd'],
-                ata=rec['ata'],
+                std=parse_time_str(rec.get('std')),
+                sta=parse_time_str(rec.get('sta')),
+                atd=parse_time_str(rec.get('atd')),
+                ata=parse_time_str(rec.get('ata')),
                 source_wtt=wtt_file,
             )
     
@@ -143,6 +143,8 @@ def process_pprp(project_id: int, pprp_file_id: int):
                     parent.save()
 
                 # Create or update PPRP Version 2 record for this date
+                std_time = parse_time_str(flight.get('std'))
+                sta_time = parse_time_str(flight.get('sta'))
                 ScheduleVersion.objects.update_or_create(
                     project=project,
                     flight_number=f_num,
@@ -153,10 +155,10 @@ def process_pprp(project_id: int, pprp_file_id: int):
                         'is_active': True,
                         'origin': flight['origin'],
                         'destination': flight['destination'],
-                        'std': flight['std'],
-                        'sta': flight['sta'],
-                        'atd': flight['std'],
-                        'ata': flight['sta'],
+                        'std': std_time,
+                        'sta': sta_time,
+                        'atd': std_time,
+                        'ata': sta_time,
                         'pprp_letter': data['letter_number'],
                         'pprp_date': flight['pprp_date'],
                         'source_wtt': parent.source_wtt if parent else None,
@@ -171,13 +173,20 @@ def process_pprp(project_id: int, pprp_file_id: int):
 
 
 
-def parse_time_str(time_str: str):
-    if not time_str:
+def parse_time_str(time_val):
+    if not time_val:
         return None
     import re, datetime
-    m = re.search(r'(\d{1,2}):(\d{2})', str(time_str))
+    if isinstance(time_val, datetime.time):
+        return time_val
+    time_str = str(time_val).strip()
+    m = re.search(r'(\d{1,2}):(\d{2})', time_str)
     if m:
-        return datetime.time(int(m.group(1)), int(m.group(2)))
+        hour = int(m.group(1))
+        minute = int(m.group(2))
+        if hour >= 24:
+            hour = hour % 24
+        return datetime.time(hour, minute)
     return None
 
 

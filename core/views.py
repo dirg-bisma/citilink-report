@@ -174,6 +174,16 @@ def upload_source_file_view(request):
                 messages.success(request, msg)
 
         except Exception as e:
+            if 'source_file' in locals() and source_file.id:
+                try:
+                    source_file.delete()
+                except Exception:
+                    pass
+            if 'file_path' in locals() and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
             if is_ajax:
                 return JsonResponse({'success': False, 'message': str(e)}, status=400)
             messages.error(request, f"Error: {str(e)}")
@@ -193,7 +203,7 @@ def upload_source_file_view(request):
 @staff_member_required
 def global_dashboard_api(request):
     """API endpoint for global dashboard - returns analytics data for a given project and optional date range."""
-    from core.analytics import otp_metric, pprp_achievement, delay_factors, daily_otp_trend
+    from core.analytics import otp_metric, pprp_achievement, delay_factors, daily_otp_trend, flight_distribution
 
     project_id = request.GET.get('project_id')
     start_day_raw = request.GET.get('start_day')
@@ -230,6 +240,7 @@ def global_dashboard_api(request):
     pprp_data = {'achievement': 0, 'total': 0, 'on_time': 0}
     delay_data = {'case_counts': [], 'durations': [], 'iata_categories': []}
     daily_trend = []
+    flight_dist = {'reg_count': 0, 'reg_pct': 0, 'chrt_count': 0, 'chrt_pct': 0, 'top_routes': []}
 
     if project_id:
         try:
@@ -238,6 +249,7 @@ def global_dashboard_api(request):
             pprp_data = pprp_achievement(project_id, project.month, start_day, end_day)
             delay_data = delay_factors(project_id, start_day, end_day)
             daily_trend = daily_otp_trend(project_id, start_day, end_day)
+            flight_dist = flight_distribution(project_id, start_day, end_day)
         except Project.DoesNotExist:
             pass
 
@@ -255,5 +267,7 @@ def global_dashboard_api(request):
         },
         'delay_data': delay_data,
         'daily_trend': daily_trend,
+        'flight_dist': flight_dist,
     })
+
 

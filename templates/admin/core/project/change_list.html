@@ -86,12 +86,12 @@
                 <div id="modal-error-notif" class="hidden text-xs text-red-600 dark:text-red-400 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50"></div>
 
                 <!-- Action Buttons -->
-                <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-150 dark:border-gray-750">
-                    <button type="button" onclick="closePprpModal()" class="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors cursor-pointer select-none">
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-750">
+                    <button type="button" onclick="closePprpModal()" class="px-5 py-2.5 text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 hover:text-gray-900 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-all cursor-pointer select-none shadow-2xs">
                         Batal
                     </button>
-                    <button type="submit" id="btn-modal-upload" class="inline-flex items-center justify-center gap-1.5 px-4.5 py-2 text-xs font-bold text-white rounded-lg shadow-sm hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
-                        <span class="material-symbols-outlined text-[17px]">cloud_upload</span>
+                    <button type="submit" id="btn-modal-upload" class="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-bold text-white rounded-xl shadow-sm hover:brightness-110 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
+                        <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
                         <span id="btn-modal-upload-text">Upload Sekarang</span>
                     </button>
                 </div>
@@ -99,8 +99,194 @@
         </div>
     </div>
 
+    <!-- MODAL POPUP: DOWNLOAD REKAP -->
+    <div id="download-rekap-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-glass-backdrop hidden opacity-0 transition-opacity duration-200 p-4" style="left: 0; right: 0; top: 0; bottom: 0;">
+        <div class="bg-white dark:bg-gray-850 rounded-2xl shadow-2xl p-7 border border-gray-200 dark:border-gray-700 transform transition-all scale-95 duration-200 text-center flex flex-col" id="download-rekap-modal-card" style="max-width: 440px; width: 100%;">
+            
+            <!-- Icon -->
+            <div class="w-13 h-13 rounded-2xl mx-auto flex items-center justify-center mb-4" style="background-color: #d1fae5 !important; color: #006b32 !important;">
+                <span class="material-symbols-outlined text-[28px]" style="color: #006b32 !important;">download</span>
+            </div>
+            
+            <!-- Title & Subtitle -->
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-1.5">Mengunduh Rekap...</h3>
+            <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-6 px-2 leading-relaxed">Mohon tunggu sebentar, file sedang disiapkan.</p>
+            
+            <!-- Progress Bar Section -->
+            <div class="mb-6 text-left">
+                <div class="flex justify-between items-center text-xs font-semibold mb-2 px-0.5">
+                    <span class="text-gray-500 dark:text-gray-400">Progress</span>
+                    <span id="download-rekap-percentage" style="color: #006b32 !important; font-weight: 700;">0%</span>
+                </div>
+                <div class="w-full rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700" id="download-rekap-progress-track" style="height: 8px; background-color: #e2e8f0;">
+                    <div id="download-rekap-progress-bar" class="h-full rounded-full transition-all duration-300" style="width: 0%; background-color: #006b32 !important;"></div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-end pt-2">
+                <button type="button" onclick="cancelDownloadRekap()" class="px-5 py-2 text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors cursor-pointer select-none shadow-2xs">
+                    Batal
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- SCRIPT FOR MODAL & AJAX UPLOAD -->
     <script>
+        // Shared background blur handler
+        function toggleBackgroundBlur(active) {
+            const targetElements = document.querySelectorAll('#changelist, #changelist-form, .change-list-content, #content-main, .results, #toolbar');
+            targetElements.forEach(el => {
+                if (active) {
+                    el.classList.add('page-focus-blur');
+                } else {
+                    el.classList.remove('page-focus-blur');
+                }
+            });
+        }
+
+        // ==========================================
+        // DOWNLOAD REKAP MODAL LOGIC (FETCH DRIVEN)
+        // ==========================================
+        let downloadRekapInterval = null;
+        let downloadAbortController = null;
+
+        window.openDownloadRekapModal = async function(downloadUrl) {
+            toggleBackgroundBlur(true);
+            const modal = document.getElementById('download-rekap-modal');
+            const modalCard = document.getElementById('download-rekap-modal-card');
+            const progressBar = document.getElementById('download-rekap-progress-bar');
+            const percentageText = document.getElementById('download-rekap-percentage');
+            
+            if (!modal || !modalCard) return;
+
+            // Reset state
+            if (progressBar) {
+                progressBar.style.width = '0%';
+                progressBar.style.backgroundColor = '#006b32';
+            }
+            if (percentageText) {
+                percentageText.textContent = '0%';
+                percentageText.style.color = '#006b32';
+            }
+            if (downloadRekapInterval) clearInterval(downloadRekapInterval);
+            
+            // Show modal with animation
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modalCard.classList.remove('scale-95');
+                modalCard.classList.add('scale-100');
+            }, 10);
+            
+            // Smooth dynamic progress simulation while waiting for server response
+            let progress = 0;
+            downloadRekapInterval = setInterval(() => {
+                let increment = 0;
+                if (progress < 40) {
+                    increment = Math.floor(Math.random() * 8) + 4;
+                } else if (progress < 70) {
+                    increment = Math.floor(Math.random() * 5) + 2;
+                } else if (progress < 88) {
+                    increment = Math.floor(Math.random() * 3) + 1;
+                } else if (progress < 94) {
+                    increment = 0.5;
+                }
+                
+                progress += increment;
+                if (progress >= 94) {
+                    progress = 94;
+                    clearInterval(downloadRekapInterval);
+                }
+                
+                const cur = Math.floor(progress);
+                if (progressBar) progressBar.style.width = cur + '%';
+                if (percentageText) percentageText.textContent = cur + '%';
+            }, 150);
+
+            // Create AbortController for cancelation
+            downloadAbortController = new AbortController();
+
+            try {
+                const response = await fetch(downloadUrl, {
+                    method: 'GET',
+                    signal: downloadAbortController.signal
+                });
+
+                if (!response.ok) {
+                    throw new Error('Gagal mengunduh rekap. Status: ' + response.status);
+                }
+
+                // Check content type or disposition
+                const blob = await response.blob();
+                
+                // Clear simulated interval and set to 100%
+                if (downloadRekapInterval) clearInterval(downloadRekapInterval);
+                if (progressBar) progressBar.style.width = '100%';
+                if (percentageText) percentageText.textContent = '100%';
+
+                // Extract filename
+                let filename = "Report_Rekap_Satu_Musim.xlsx";
+                const disposition = response.headers.get('Content-Disposition');
+                if (disposition && disposition.indexOf('filename=') !== -1) {
+                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+
+                // Trigger actual file save
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(blobUrl);
+
+                // Auto close modal after brief delay so user sees 100%
+                setTimeout(() => {
+                    closeDownloadRekapModal();
+                }, 800);
+
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    // Canceled by user, no error prompt needed
+                    return;
+                }
+                if (downloadRekapInterval) clearInterval(downloadRekapInterval);
+                alert('Terjadi kendala saat menyiapkan file: ' + err.message);
+                closeDownloadRekapModal();
+            }
+        };
+
+        window.cancelDownloadRekap = function() {
+            if (downloadAbortController) {
+                downloadAbortController.abort();
+            }
+            closeDownloadRekapModal();
+        };
+
+        window.closeDownloadRekapModal = function() {
+            toggleBackgroundBlur(false);
+            const modal = document.getElementById('download-rekap-modal');
+            const modalCard = document.getElementById('download-rekap-modal-card');
+            
+            if (downloadRekapInterval) clearInterval(downloadRekapInterval);
+            
+            if (!modal) return;
+            modal.classList.add('opacity-0');
+            if (modalCard) {
+                modalCard.classList.remove('scale-100');
+                modalCard.classList.add('scale-95');
+            }
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        };
+
         document.addEventListener('DOMContentLoaded', function() {
             const pprpModal = document.getElementById('pprp-modal');
             const pprpModalCard = document.getElementById('pprp-modal-card');
@@ -118,18 +304,7 @@
             
             let currentProjectId = null;
 
-            function toggleBackgroundBlur(active) {
-                const targetElements = document.querySelectorAll('#changelist, #changelist-form, .change-list-content, #content-main, .results, #toolbar');
-                targetElements.forEach(el => {
-                    if (active) {
-                        el.classList.add('page-focus-blur');
-                    } else {
-                        el.classList.remove('page-focus-blur');
-                    }
-                });
-            }
-
-            // Global modal open function
+            // Global modal open function for PPRP
             window.openPprpModal = function(projectId, projectCode) {
                 toggleBackgroundBlur(true);
                 currentProjectId = projectId;
@@ -163,79 +338,79 @@
             };
 
             // File selection listener
-            fileInput.addEventListener('change', function() {
-                if (this.files && this.files.length > 0) {
-                    if (this.files.length === 1) {
-                        fileName.textContent = this.files[0].name;
+            if (fileInput) {
+                fileInput.addEventListener('change', function() {
+                    if (this.files && this.files.length > 0) {
+                        if (this.files.length === 1) {
+                            fileName.textContent = this.files[0].name;
+                        } else {
+                            fileName.textContent = `${this.files.length} file PDF dipilih (${Array.from(this.files).map(f => f.name).join(', ')})`;
+                        }
+                        fileDisplay.classList.remove('hidden');
+                        btnUpload.disabled = false;
                     } else {
-                        fileName.textContent = `${this.files.length} file PDF dipilih (${Array.from(this.files).map(f => f.name).join(', ')})`;
+                        fileDisplay.classList.add('hidden');
+                        btnUpload.disabled = true;
                     }
-                    fileDisplay.classList.remove('hidden');
-                    btnUpload.disabled = false;
-                } else {
-                    fileDisplay.classList.add('hidden');
-                    btnUpload.disabled = true;
-                }
-            });
+                });
+            }
 
             // Form Submit AJAX
-            form.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                if (!currentProjectId || !fileInput.files.length) return;
+            if (form) {
+                form.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    if (!currentProjectId || !fileInput.files.length) return;
 
-                btnUpload.disabled = true;
-                btnUploadText.textContent = 'Memproses...';
-                progressArea.classList.remove('hidden');
-                errorNotif.classList.add('hidden');
-                progressLabel.textContent = 'Mengunggah & menyinkronkan jadwal PPRP...';
+                    btnUpload.disabled = true;
+                    btnUploadText.textContent = 'Memproses...';
+                    progressArea.classList.remove('hidden');
+                    errorNotif.classList.add('hidden');
+                    progressLabel.textContent = 'Mengunggah & menyinkronkan jadwal PPRP...';
 
-                const formData = new FormData(form);
-                const uploadUrl = `/admin/core/project/${currentProjectId}/upload-pprp/`;
+                    const formData = new FormData(form);
+                    const uploadUrl = `/admin/core/project/${currentProjectId}/upload-pprp/`;
 
-                try {
-                    const response = await fetch(uploadUrl, {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
+                    try {
+                        const response = await fetch(uploadUrl, {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            progressLabel.textContent = 'Sukses!';
+                            btnUploadText.textContent = 'Berhasil!';
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 600);
+                        } else {
+                            progressArea.classList.add('hidden');
+                            btnUpload.disabled = false;
+                            btnUploadText.textContent = 'Upload Sekarang';
+                            errorNotif.textContent = result.message || 'Terjadi kesalahan saat upload.';
+                            errorNotif.classList.remove('hidden');
                         }
-                    });
-
-                    const result = await response.json();
-
-                    if (response.ok && result.success) {
-                        progressLabel.textContent = 'Sukses!';
-                        btnUploadText.textContent = 'Berhasil!';
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 600);
-                    } else {
+                    } catch (error) {
                         progressArea.classList.add('hidden');
                         btnUpload.disabled = false;
                         btnUploadText.textContent = 'Upload Sekarang';
-                        errorNotif.textContent = result.message || 'Terjadi kesalahan saat upload.';
+                        errorNotif.textContent = 'Network error: ' + error;
                         errorNotif.classList.remove('hidden');
                     }
-                } catch (error) {
-                    progressArea.classList.add('hidden');
-                    btnUpload.disabled = false;
-                    btnUploadText.textContent = 'Upload Sekarang';
-                    errorNotif.textContent = 'Network error: ' + error;
-                    errorNotif.classList.remove('hidden');
-                }
-            });
-        });
+                });
+            }
 
-        // Kustomisasi Action Bar (Ubah dropdown Select Action menjadi Tombol Delete)
-        document.addEventListener('DOMContentLoaded', function() {
-            // Cari elemen select action tersembunyi/asli
+            // Kustomisasi Action Bar (Ubah dropdown Select Action menjadi Tombol Delete)
             const actionSelect = document.querySelector('select[name="action"]');
             if (actionSelect) {
                 // Set default action to delete
                 actionSelect.value = 'delete_selected';
                 
                 // Di unfold, dropdown dibungkus dalam container komponen. Kita cari parent yang terlihat.
-                // Mencari elemen pembungkus dropdown (biasanya label atau div dengan relative)
                 const unfoldDropdownContainer = actionSelect.closest('.relative') || actionSelect.parentElement;
                 
                 if (unfoldDropdownContainer) {
@@ -243,7 +418,7 @@
                 }
 
                 // Cari container tempat menaruh tombol baru (baris bawah)
-                const actionBarContainer = unfoldDropdownContainer.parentElement;
+                const actionBarContainer = unfoldDropdownContainer ? unfoldDropdownContainer.parentElement : null;
 
                 if (actionBarContainer) {
                     // Buat tombol delete dengan desain premium yang lebih elok
@@ -294,9 +469,9 @@
 {% endblock %}
 
 {% block object-tools-items %}
-    <a href="{% url 'admin:project_download_rekap' %}" class="inline-flex items-center justify-center gap-2 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important; text-decoration: none; margin-right: 0.5rem;" title="Download Rekapitulasi Laporan Seluruh Musim">
+    <button type="button" onclick="openDownloadRekapModal('{% url 'admin:project_download_rekap' %}')" class="inline-flex items-center justify-center gap-2 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none border-none" style="background-color: #006b32; color: #ffffff !important; margin-right: 0.5rem;" title="Download Rekapitulasi Laporan Seluruh Musim">
         <span class="material-symbols-outlined text-[18px]">file_download</span>
         Download Rekap
-    </a>
+    </button>
     {{ block.super }}
 {% endblock %}

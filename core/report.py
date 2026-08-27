@@ -630,6 +630,64 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
     return seq - 1  # Jumlah blok yang diisi
 
 
+def _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, pprp_entries, year):
+    """
+    Sisipkan sub-blok PPRP (baris 'MENJADI') di bawah blok row_start..row_start+block_len-1.
+    Diekstrak dari logika sisip-blok yang sudah teruji di generate_rekap_report, supaya bisa
+    dipakai ulang baik untuk flight yang sudah ada di template maupun blok flight baru.
+    Mengembalikan row_end blok setelah semua sisipan (posisi baris terakhir blok saat ini).
+    """
+    row_end = row_start + block_len - 1
+    for pprp in reversed(pprp_entries):
+        if cols.get('periode') and pprp.get('periode_semula'):
+            periode_col = cols['periode']
+            target_row = row_start
+            for rng in ws.merged_cells.ranges:
+                if (rng.min_col <= periode_col <= rng.max_col and rng.min_row <= row_start <= rng.max_row):
+                    target_row = rng.min_row
+                    break
+            cell = ws.cell(target_row, periode_col)
+            if type(cell).__name__ != 'MergedCell':
+                cell.value = pprp['periode_semula']
+
+        insert_at = row_end + 1
+        ws.insert_rows(insert_at, block_len)
+        _shift_merged_ranges_below(ws, insert_at, block_len)
+        _shift_formulas_below(ws, insert_at, block_len)
+
+        for offset in range(block_len):
+            _copy_row(ws, row_start + offset, insert_at + offset)
+        _copy_merged_ranges_for_block(ws, row_start, insert_at, block_len)
+
+        top_row = insert_at
+        ws.cell(top_row, cols['no']).value = None
+        if cols.get('periode') and pprp.get('periode'):
+            ws.cell(top_row, cols['periode']).value = pprp['periode']
+        if cols.get('surat') and pprp.get('pprp_letter'):
+            ws.cell(top_row, cols['surat']).value = pprp['pprp_letter']
+        if cols.get('tipe'):
+            ws.cell(top_row, cols['tipe']).value = 'Perubahan'
+        if cols.get('etd') and pprp.get('std'):
+            ws.cell(top_row, cols['etd']).value = pprp['std']
+        if cols.get('eta') and pprp.get('sta'):
+            ws.cell(top_row, cols['eta']).value = pprp['sta']
+        if cols.get('atd') and pprp.get('atd'):
+            ws.cell(top_row, cols['atd']).value = pprp['atd']
+        if cols.get('ata') and pprp.get('ata'):
+            ws.cell(top_row, cols['ata']).value = pprp['ata']
+
+        if cols.get('day_start') and month_col_map:
+            for m_num, m_col_start in month_col_map.items():
+                days_in_month = calendar.monthrange(year, m_num)[1]
+                for offset in range(block_len):
+                    for day_col in range(m_col_start, m_col_start + days_in_month):
+                        ws.cell(insert_at + offset, day_col).value = None
+
+        row_end = insert_at + block_len - 1
+
+    return row_end
+
+
 def generate_rekap_report(output_path: str) -> int:
     """
     Menghasilkan laporan rekapitulasi satu musim penuh dengan menggabungkan 
@@ -663,10 +721,14 @@ def generate_rekap_report(output_path: str) -> int:
                 'wtt_end_date': None,
                 'pprp_list': [],
                 'daily': {},
+                'first_seen': None,
             }
 
         fd = flight_data[fn]
         d = sv.flight_date
+
+        if fd['first_seen'] is None or sv.created_at < fd['first_seen']:
+            fd['first_seen'] = sv.created_at
 
         if sv.operational_flag:
             fd['daily'][(d.year, d.month, d.day)] = 1
@@ -696,6 +758,7 @@ def generate_rekap_report(output_path: str) -> int:
                     'sta': sv.sta.strftime('%H:%M') if sv.sta else None,
                     'atd': sv.atd.strftime('%H:%M') if sv.atd else None,
                     'ata': sv.ata.strftime('%H:%M') if sv.ata else None,
+                    'source_pprp_path': sv.source_pprp.file_path if sv.source_pprp else None,
                 })
 
     for fn, fd in flight_data.items():
@@ -753,55 +816,121 @@ def generate_rekap_report(output_path: str) -> int:
         row_end = _block_end(ws, row_start, next_row, ws.max_row)
         block_len = row_end - row_start + 1
 
-        for pprp in reversed(fd['pprp_list']):
-            if cols.get('periode') and pprp.get('periode_semula'):
-                periode_col = cols['periode']
-                target_row = row_start
-                for rng in ws.merged_cells.ranges:
-                    if (rng.min_col <= periode_col <= rng.max_col and rng.min_row <= row_start <= rng.max_row):
-                        target_row = rng.min_row
-                        break
-                cell = ws.cell(target_row, periode_col)
-                if type(cell).__name__ != 'MergedCell':
-                    cell.value = pprp['periode_semula']
-
-            insert_at = row_end + 1
-            ws.insert_rows(insert_at, block_len)
-            _shift_merged_ranges_below(ws, insert_at, block_len)
-            _shift_formulas_below(ws, insert_at, block_len)
-
-            for offset in range(block_len):
-                _copy_row(ws, row_start + offset, insert_at + offset)
-            _copy_merged_ranges_for_block(ws, row_start, insert_at, block_len)
-
-            top_row = insert_at
-            ws.cell(top_row, cols['no']).value = None
-            if cols.get('periode') and pprp['periode']:
-                ws.cell(top_row, cols['periode']).value = pprp['periode']
-            if cols.get('surat') and pprp['pprp_letter']:
-                ws.cell(top_row, cols['surat']).value = pprp['pprp_letter']
-            if cols.get('tipe'):
-                ws.cell(top_row, cols['tipe']).value = 'Perubahan'
-            if cols.get('etd') and pprp['std']:
-                ws.cell(top_row, cols['etd']).value = pprp['std']
-            if cols.get('eta') and pprp['sta']:
-                ws.cell(top_row, cols['eta']).value = pprp['sta']
-            if cols.get('atd') and pprp['atd']:
-                ws.cell(top_row, cols['atd']).value = pprp['atd']
-            if cols.get('ata') and pprp['ata']:
-                ws.cell(top_row, cols['ata']).value = pprp['ata']
-                
-            if cols.get('day_start') and month_col_map:
-                latest_year = latest_project.year
-                for m_num, m_col_start in month_col_map.items():
-                    days_in_month = calendar.monthrange(latest_year, m_num)[1]
-                    for offset in range(block_len):
-                        for day_col in range(m_col_start, m_col_start + days_in_month):
-                            ws.cell(insert_at + offset, day_col).value = None
-
-            row_end = insert_at + block_len - 1
+        _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, fd['pprp_list'], latest_project.year)
 
     headers = _find_flight_headers(ws, col_flight)
+
+    # --- Flight yang sama sekali baru (belum pernah ada di template) ---
+    # Ditambahkan sebagai blok baru di baris paling bawah daftar flight (sebelum
+    # legenda "Keterangan Pengisian" & blok tanda tangan), diurutkan berdasarkan
+    # kapan pertama kali flight itu tercatat di database. Hanya flight yang punya
+    # data PPRP yang diproses (surat + periode wajib berasal dari PPRP resmi;
+    # flight yang murni WTT tanpa PPRP dilewati, bukan ditebak-tebak).
+    existing_norms = {h[1] for h in headers}
+    new_flights = [
+        (fn, fd) for fn, fd in flight_data.items()
+        if fn not in existing_norms and fd['pprp_list']
+    ]
+    new_flights.sort(key=lambda item: item[1]['first_seen'] or datetime.datetime.max)
+
+    if new_flights and headers:
+        from core.parsers.pprp import parse_pprp as _parse_pprp_file
+
+        tmpl_start = headers[-1][0]
+        tmpl_len = _block_end(ws, tmpl_start, None, ws.max_row) - tmpl_start + 1
+        insert_cursor = tmpl_start + tmpl_len - 1  # = row akhir blok terakhir saat ini
+
+        for fn, fd in new_flights:
+            pprp_sorted = sorted(
+                fd['pprp_list'],
+                key=lambda p: p.get('pprp_date') or datetime.date.max
+            )
+            first_pprp = pprp_sorted[0]
+
+            # Re-parse PDF PPRP asli untuk ambil tanggal akhir berlaku + tipe
+            # permohonan (tidak tersimpan di DB, hanya ada di file sumber).
+            end_date = None
+            submission_type = 'Penambahan'
+            pdf_path = first_pprp.get('source_pprp_path')
+            if pdf_path and os.path.exists(pdf_path):
+                try:
+                    parsed = _parse_pprp_file(pdf_path)
+                    submission_type = parsed.get('submission_type') or submission_type
+                    for f in parsed.get('flights', []):
+                        if _normalize_flight(f['flight_number']) == fn:
+                            end_date = f.get('end_date')
+                            break
+                except Exception:
+                    pass
+
+            insert_at = insert_cursor + 1
+            ws.insert_rows(insert_at, tmpl_len)
+            _shift_merged_ranges_below(ws, insert_at, tmpl_len)
+            _shift_formulas_below(ws, insert_at, tmpl_len)
+            for offset in range(tmpl_len):
+                _copy_row(ws, tmpl_start + offset, insert_at + offset)
+            _copy_merged_ranges_for_block(ws, tmpl_start, insert_at, tmpl_len)
+
+            top_row = insert_at
+            display_flight = ('QG-' + fn[2:]) if fn.startswith('QG') else fn
+            route_str = f"{fd['origin']}-{fd['destination']}"
+
+            if cols.get('flight'):
+                ws.cell(top_row, cols['flight']).value = display_flight
+            if cols.get('to'):
+                ws.cell(top_row, cols['to']).value = route_str
+
+            src_times = fd.get('wtt') or first_pprp
+            if cols.get('etd') and src_times.get('std'):
+                ws.cell(top_row, cols['etd']).value = src_times['std']
+            if cols.get('eta') and src_times.get('sta'):
+                ws.cell(top_row, cols['eta']).value = src_times['sta']
+            if cols.get('atd') and src_times.get('atd'):
+                ws.cell(top_row, cols['atd']).value = src_times['atd']
+            if cols.get('ata') and src_times.get('ata'):
+                ws.cell(top_row, cols['ata']).value = src_times['ata']
+
+            if end_date and first_pprp.get('pprp_date'):
+                d1, d2 = first_pprp['pprp_date'], end_date
+                periode_str = f"{d1.day} {MONTH_ABBR[d1.month]} {d1.year}/{d2.day} {MONTH_ABBR[d2.month]} {d2.year}"
+            else:
+                periode_str = 'PERLU REVIEW - SURAT TIDAK TERBACA'
+            if cols.get('periode'):
+                ws.cell(top_row, cols['periode']).value = periode_str
+            if cols.get('surat') and first_pprp.get('pprp_letter'):
+                ws.cell(top_row, cols['surat']).value = first_pprp['pprp_letter']
+            if cols.get('tipe'):
+                ws.cell(top_row, cols['tipe']).value = submission_type
+
+            block_end = insert_at + tmpl_len - 1
+
+            # Kalau flight baru ini sudah punya >1 surat PPRP, sisipkan sub-blok
+            # tambahan pakai mekanisme yang sama seperti flight lama (pakai
+            # surat pertama & end_date hasil re-parse sebagai jangkar periode,
+            # menggantikan peran wtt_start/wtt_end yang tidak dimiliki flight baru).
+            if len(pprp_sorted) > 1 and end_date and first_pprp.get('pprp_date'):
+                anchor_start = first_pprp['pprp_date']
+                anchor_end = end_date
+                for extra in pprp_sorted[1:]:
+                    d_p = extra.get('pprp_date')
+                    if not d_p:
+                        continue
+                    semula_end = d_p - datetime.timedelta(days=1)
+                    extra['periode_semula'] = (
+                        f"{anchor_start.day} {MONTH_ABBR[anchor_start.month]} {anchor_start.year}/"
+                        f"{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
+                    )
+                    extra['periode'] = (
+                        f"{d_p.day} {MONTH_ABBR[d_p.month]} {d_p.year}/"
+                        f"{anchor_end.day} {MONTH_ABBR[anchor_end.month]} {anchor_end.year}"
+                    )
+                block_end = _insert_pprp_subblocks(
+                    ws, cols, month_col_map, insert_at, tmpl_len, pprp_sorted[1:], latest_project.year
+                )
+
+            insert_cursor = block_end
+
+        headers = _find_flight_headers(ws, col_flight)
 
     latest_year = latest_project.year
     for i, (row_start, flight_norm, flight_str) in enumerate(headers):

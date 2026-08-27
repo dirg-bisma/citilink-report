@@ -177,13 +177,9 @@ def pprp_achievement(project_id: int, month: int, start_day: int = None, end_day
 
 def delay_factors(project_id: int, start_day: int = None, end_day: int = None) -> dict:
     """Comprehensive delay breakdown with OTP-15 tolerance"""
-    flights = filter_flights(project_id, start_day, end_day).exclude(delay_code__isnull=True).exclude(delay_code='')
+    flights = filter_flights(project_id, start_day, end_day)
 
-    # 1. Frequency / Case Count per Delay Reason
-    delay_counts = flights.values('delay_code').annotate(count=Count('id')).order_by('-count')
-    case_counts = []
-    
-    # 2. Total Delay Time in Hours per Delay Reason
+    delay_counts_map = {}
     delay_durations = {}
     iata_category_counts = {
         'LATARR': 0,
@@ -194,25 +190,30 @@ def delay_factors(project_id: int, start_day: int = None, end_day: int = None) -
     }
 
     for f in flights:
-        code = f.delay_code.strip()
-        cat = map_iata_category(code)
-        iata_category_counts[cat] += 1
-
         if f.std and f.atd:
             std_m = f.std.hour * 60 + f.std.minute
             atd_m = f.atd.hour * 60 + f.atd.minute
             diff = atd_m - std_m
             if diff < -720: diff += 1440
             elif diff > 720: diff -= 1440
-            if diff > 15: # OTP-15 tolerance
+
+            if diff > 15:  # Delayed > 15 mins (OTP-15 standard)
+                if f.delay_code and f.delay_code.strip():
+                    code = f.delay_code.strip()
+                    cat = map_iata_category(code)
+                else:
+                    code = 'UNASSIGNED'
+                    cat = 'OTHERS'
+
+                delay_counts_map[code] = delay_counts_map.get(code, 0) + 1
                 delay_durations[code] = delay_durations.get(code, 0) + diff
+                iata_category_counts[cat] += 1
 
-    for item in delay_counts[:10]:
-        case_counts.append({
-            'code': item['delay_code'],
-            'count': item['count']
-        })
+    # Format Top Case Counts
+    sorted_cases = sorted(delay_counts_map.items(), key=lambda x: x[1], reverse=True)[:10]
+    case_counts = [{'code': code, 'count': count} for code, count in sorted_cases]
 
+    # Format Top Durations
     duration_list = []
     sorted_durations = sorted(delay_durations.items(), key=lambda x: x[1], reverse=True)[:10]
     for code, total_min in sorted_durations:
@@ -224,18 +225,21 @@ def delay_factors(project_id: int, start_day: int = None, end_day: int = None) -
             'duration_str': f"{hrs:02d}:{mins:02d}",
         })
 
+    # Format IATA Categories
     total_iata = sum(iata_category_counts.values())
     iata_donut = []
     if total_iata > 0:
         for cat, cnt in iata_category_counts.items():
-            pct = round((cnt / total_iata) * 100, 2)
-            iata_donut.append({'category': cat, 'count': cnt, 'percentage': pct})
+            if cnt > 0:
+                pct = round((cnt / total_iata) * 100, 2)
+                iata_donut.append({'category': cat, 'count': cnt, 'percentage': pct})
 
     return {
         'case_counts': case_counts,
         'durations': duration_list,
         'iata_categories': iata_donut,
     }
+
 
 
 def daily_otp_trend(project_id: int, start_day: int = None, end_day: int = None) -> list:
@@ -275,3 +279,46 @@ def daily_otp_trend(project_id: int, start_day: int = None, end_day: int = None)
         })
 
     return trend_list
+
+
+def flight_distribution(project_id: int, start_day: int = None, end_day: int = None) -> dict:
+    """Distribution of flights by category (REG vs CHRT) and top destination routes from SUB"""
+    flights = filter_flights(project_id, start_day, end_day)
+
+    total = flights.count()
+    if total == 0:
+        return {
+            'reg_count': 0,
+            'reg_pct': 0,
+            'chrt_count': 0,
+            'chrt_pct': 0,
+            'top_routes': []
+        }
+
+    reg_count = 0
+    chrt_count = 0
+    routes = {}
+
+    for f in flights:
+        cat = parse_flight_category(f.flight_number)
+        if cat == 'CHRT/XTRA':
+            chrt_count += 1
+        else:
+            reg_count += 1
+
+        if f.destination:
+            dest = f.destination.strip().upper()
+            route_name = f"SUB-{dest}"
+            routes[route_name] = routes.get(route_name, 0) + 1
+
+    sorted_routes = sorted(routes.items(), key=lambda x: x[1], reverse=True)[:8]
+    route_list = [{'route': r, 'count': c} for r, c in sorted_routes]
+
+    return {
+        'reg_count': reg_count,
+        'reg_pct': round((reg_count / total) * 100, 1) if total > 0 else 0,
+        'chrt_count': chrt_count,
+        'chrt_pct': round((chrt_count / total) * 100, 1) if total > 0 else 0,
+        'top_routes': route_list,
+    }
+
