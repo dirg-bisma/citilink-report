@@ -27,6 +27,7 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.formula.translate import Translator
 
 from core.models import Project, ScheduleVersion
+from core.services import _utc_time_to_local, _utc_offset_for_airport
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,119 @@ MONTH_ABBR = {
 def _normalize_flight(s):
     """'QG-488' atau 'QG 488' -> 'QG488'."""
     return str(s).replace('-', '').replace(' ', '').upper().strip()
+
+
+def _pprp_letter_end_date(pdf_path, flight_norm, start_date, cache):
+    """
+    Ambil tanggal akhir berlaku sebuah segmen PPRP dari PDF surat aslinya
+    (tidak tersimpan di DB, hanya ada di file sumber). Segmen dicocokkan
+    berdasarkan flight number + tanggal mulai berlaku; fallback ke match
+    flight number saja. cache: dict per-run agar satu PDF hanya diparse sekali.
+    """
+    if not pdf_path or not os.path.exists(pdf_path):
+        return None
+    if pdf_path not in cache:
+        try:
+            from core.parsers.pprp import parse_pprp
+            cache[pdf_path] = parse_pprp(pdf_path)
+        except Exception:
+            cache[pdf_path] = None
+    parsed = cache[pdf_path]
+    if not parsed:
+        return None
+    fallback = None
+    for f in parsed.get('flights', []):
+        if _normalize_flight(f['flight_number']) != flight_norm:
+            continue
+        if start_date and f.get('pprp_date') == start_date:
+            return f.get('end_date')
+        if fallback is None:
+            fallback = f.get('end_date')
+    return fallback
+
+
+def _assign_pprp_periods(fn, fd, pdf_cache):
+    """
+    Urutkan pprp_list kronologis lalu isi string periode tiap entri:
+    - periode_semula hanya pada entri PERTAMA (baseline WTT dipotong sampai
+      sehari sebelum PPRP pertama berlaku).
+    - periode entri non-terakhir berakhir sehari sebelum entri berikutnya mulai.
+    - periode entri TERAKHIR berakhir pada tanggal akhir berlaku di surat PPRP
+      (diparse dari PDF); fallback ke tanggal WTT terakhir bila PDF tak terbaca.
+    """
+    wtt_start = fd.get('wtt_start_date')
+    wtt_end = fd.get('wtt_end_date')
+    fd['pprp_list'].sort(key=lambda p: p.get('pprp_date') or datetime.date.max)
+    plist = fd['pprp_list']
+    for i, pprp in enumerate(plist):
+        d_pprp = pprp.get('pprp_date')
+        pprp['periode_semula'] = ''
+        pprp['periode'] = ''
+        if not d_pprp:
+            continue
+        if i == 0 and wtt_start:
+            semula_end = d_pprp - datetime.timedelta(days=1)
+            pprp['periode_semula'] = (
+                f"{wtt_start.day} {MONTH_ABBR[wtt_start.month]} {wtt_start.year}"
+                f"/{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
+            )
+        if i + 1 < len(plist) and plist[i + 1].get('pprp_date'):
+            seg_end = plist[i + 1]['pprp_date'] - datetime.timedelta(days=1)
+        else:
+            seg_end = _pprp_letter_end_date(
+                pprp.get('source_pprp_path'), fn, d_pprp, pdf_cache
+            ) or wtt_end
+        if seg_end:
+            pprp['periode'] = (
+                f"{d_pprp.day} {MONTH_ABBR[d_pprp.month]} {d_pprp.year}"
+                f"/{seg_end.day} {MONTH_ABBR[seg_end.month]} {seg_end.year}"
+            )
+
+
+def _resolve_menjadi_times(fd, pprp):
+    """
+    Isi jam final baris MENJADI sesuai aturan sumber data yang dikonfirmasi user:
+    - etd_utc: STD dari GHP (Local) dikonversi ke UTC; None (sel kosong) bila
+      segmen belum punya data GHP sama sekali.
+    - eta    : STA dari surat PPRP, sudah UTC, dipakai apa adanya (key 'sta') —
+      GHP tidak memuat jam tiba di bandara tujuan.
+    - atd/ata: jam WTT (Local) pada tanggal pertama periode segmen; fallback ke
+      tanggal WTT terdekat setelahnya. Bila flight tidak ada di WTT sama sekali
+      (rute baru murni dari PPRP): ATD = jam realisasi GHP (Local), ATA = STA
+      surat PPRP (UTC) dikonversi Local per zona waktu bandara tujuan.
+    """
+    ghp_std = pprp.get('ghp_std')
+    if ghp_std:
+        utc_t = _utc_time_to_local(ghp_std, -_utc_offset_for_airport(fd.get('origin')))
+        pprp['etd_utc'] = utc_t.strftime('%H:%M')
+    else:
+        pprp['etd_utc'] = None
+
+    atd = ata = None
+    d = pprp.get('pprp_date')
+    v1_times = fd.get('v1_times') or {}
+    if d and v1_times:
+        if d in v1_times:
+            atd, ata = v1_times[d]
+        else:
+            later = sorted(dt for dt in v1_times if dt >= d)
+            if later:
+                atd, ata = v1_times[later[0]]
+
+    # Fallback untuk flight tanpa data WTT (rute baru murni dari surat PPRP)
+    if atd is None and pprp.get('ghp_atd'):
+        atd = pprp['ghp_atd'].strftime('%H:%M')
+    if ata is None and pprp.get('sta'):
+        try:
+            sta_utc = datetime.datetime.strptime(pprp['sta'], '%H:%M').time()
+            ata = _utc_time_to_local(
+                sta_utc, _utc_offset_for_airport(fd.get('destination'))
+            ).strftime('%H:%M')
+        except (ValueError, TypeError):
+            pass
+
+    pprp['atd'] = atd
+    pprp['ata'] = ata
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +495,7 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
                 'wtt_end_date': None,     # tanggal terakhir WTT (untuk periode MENJADI)
                 'pprp_list': [],
                 'daily': {},  # (year, month, day) -> 1 or 0
+                'v1_times': {},  # flight_date -> (std, sta) murni WTT, untuk ATD/ATA
             }
 
         d = sv.flight_date
@@ -397,54 +512,52 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
                 fd['wtt_start_date'] = sv.flight_date
             if fd['wtt_end_date'] is None or sv.flight_date > fd['wtt_end_date']:
                 fd['wtt_end_date'] = sv.flight_date
-            # Set metadata WTT (hanya sekali, dari record pertama)
+            # Set metadata WTT (hanya sekali, dari record pertama = tanggal paling
+            # awal). ATD/ATA laporan = jam WTT (Local); pakai std/sta v1 yang
+            # selalu murni WTT (kolom atd v1 bisa tercemar data GHP lama).
             if not fd['wtt']:
                 fd['wtt'] = {
                     'std': sv.std.strftime('%H:%M') if sv.std else None,
                     'sta': sv.sta.strftime('%H:%M') if sv.sta else None,
-                    'atd': sv.atd.strftime('%H:%M') if sv.atd else None,
-                    'ata': sv.ata.strftime('%H:%M') if sv.ata else None,
+                    'atd': sv.std.strftime('%H:%M') if sv.std else None,
+                    'ata': sv.sta.strftime('%H:%M') if sv.sta else None,
                 }
+            fd['v1_times'][sv.flight_date] = (
+                sv.std.strftime('%H:%M') if sv.std else None,
+                sv.sta.strftime('%H:%M') if sv.sta else None,
+            )
         elif sv.pprp_letter:
-            # Baris PPRP — satu record per surat PPRP per flight
-            existing_letters = [p['pprp_letter'] for p in flight_data[fn]['pprp_list']]
-            if sv.pprp_letter not in existing_letters:
-                # Periode MENJADI: pprp_date s/d akhir musim (wtt_end_date)
-                # wtt_end_date mungkin belum terisi saat ini (tergantung urutan query),
-                # akan di-resolve setelah loop selesai
-                flight_data[fn]['pprp_list'].append({
+            # Baris PPRP — satu record per SEGMEN (surat + tanggal mulai berlaku).
+            # Satu surat bisa memuat >1 segmen jadwal untuk flight yang sama
+            # (contoh: STD berubah lagi di tengah masa berlaku surat).
+            plist = flight_data[fn]['pprp_list']
+            entry = next((p for p in plist
+                          if p['pprp_letter'] == sv.pprp_letter and p['pprp_date'] == sv.pprp_date), None)
+            if entry is None:
+                # Periode & jam final dihitung setelah loop (perlu daftar segmen lengkap)
+                plist.append({
                     'pprp_letter': sv.pprp_letter,
-                    'pprp_date': sv.pprp_date,          # tanggal mulai berlaku PPRP
+                    'pprp_date': sv.pprp_date,          # tanggal mulai berlaku segmen
                     'periode': '',                       # akan dihitung setelah loop
                     'std': sv.std.strftime('%H:%M') if sv.std else None,
                     'sta': sv.sta.strftime('%H:%M') if sv.sta else None,
-                    'atd': sv.atd.strftime('%H:%M') if sv.atd else None,
-                    'ata': sv.ata.strftime('%H:%M') if sv.ata else None,
+                    'ghp_std': sv.ghp_std,               # STD GHP (Local) untuk kolom ETD
+                    'ghp_atd': sv.ghp_atd,               # ATD aktual GHP (Local), fallback ATD non-WTT
+                    'source_pprp_path': sv.source_pprp.file_path if sv.source_pprp else None,
                 })
+            else:
+                # Pakai data GHP dari tanggal paling awal segmen yang memilikinya
+                if entry.get('ghp_std') is None and sv.ghp_std:
+                    entry['ghp_std'] = sv.ghp_std
+                if entry.get('ghp_atd') is None and sv.ghp_atd:
+                    entry['ghp_atd'] = sv.ghp_atd
 
     # --- Hitung string periode setelah loop selesai (wtt_end_date sudah terisi) ---
+    pdf_cache = {}
     for fn, fd in flight_data.items():
-        wtt_start = fd.get('wtt_start_date')
-        wtt_end = fd.get('wtt_end_date')
+        _assign_pprp_periods(fn, fd, pdf_cache)
         for pprp in fd['pprp_list']:
-            d_pprp = pprp.get('pprp_date')
-            if not d_pprp:
-                continue
-            import datetime as _dt
-            semula_end = d_pprp - _dt.timedelta(days=1)
-            # Simpan info periode di dict pprp untuk dipakai saat inject template
-            if wtt_start:
-                pprp['periode_semula'] = (
-                    f"{wtt_start.day} {MONTH_ABBR[wtt_start.month]} {wtt_start.year}"
-                    f"/{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
-                )
-            else:
-                pprp['periode_semula'] = ''
-            if wtt_end:
-                pprp['periode'] = (
-                    f"{d_pprp.day} {MONTH_ABBR[d_pprp.month]} {d_pprp.year}"
-                    f"/{wtt_end.day} {MONTH_ABBR[wtt_end.month]} {wtt_end.year}"
-                )
+            _resolve_menjadi_times(fd, pprp)
 
     # --- Buka template Excel ---
     wb = load_workbook(template_path)
@@ -499,7 +612,11 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
         row_end = _block_end(ws, row_start, next_row, ws.max_row)
         block_len = row_end - row_start + 1
 
-        for pprp in reversed(fd['pprp_list']):
+        # Iterasi kronologis: segmen paling awal disisipkan lebih dulu sehingga
+        # tampil tepat di bawah blok SEMULA, disusul segmen berikutnya.
+        # periode_semula hanya terisi pada segmen pertama (lihat _assign_pprp_periods),
+        # jadi blok SEMULA hanya ditulis sekali.
+        for pprp in fd['pprp_list']:
             # --- UPDATE SEMULA block: ubah periode end date menjadi pprp_date - 1 ---
             if cols.get('periode') and pprp.get('periode_semula'):
                 periode_col = cols['periode']
@@ -541,15 +658,18 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
             # Update Tipe Pengajuan MENJADI
             if cols.get('tipe'):
                 ws.cell(top_row, cols['tipe']).value = 'Perubahan'
-            # Update jam (ETD/ETA/ATD/ATA) dari PPRP
-            if cols.get('etd') and pprp['std']:
-                ws.cell(top_row, cols['etd']).value = pprp['std']
-            if cols.get('eta') and pprp['sta']:
-                ws.cell(top_row, cols['eta']).value = pprp['sta']
-            if cols.get('atd') and pprp['atd']:
-                ws.cell(top_row, cols['atd']).value = pprp['atd']
-            if cols.get('ata') and pprp['ata']:
-                ws.cell(top_row, cols['ata']).value = pprp['ata']
+            # Jam baris MENJADI: ETD = STD GHP dikonversi UTC (kosong bila GHP
+            # belum ada), ETA = STA surat PPRP (UTC), ATD/ATA = jam WTT (Local).
+            # Selalu ditulis (termasuk None) agar nilai warisan salinan blok
+            # SEMULA tidak tertinggal di baris MENJADI.
+            if cols.get('etd'):
+                ws.cell(top_row, cols['etd']).value = pprp.get('etd_utc')
+            if cols.get('eta'):
+                ws.cell(top_row, cols['eta']).value = pprp.get('sta')
+            if cols.get('atd'):
+                ws.cell(top_row, cols['atd']).value = pprp.get('atd')
+            if cols.get('ata'):
+                ws.cell(top_row, cols['ata']).value = pprp.get('ata')
             # Kosongkan kolom harian (akan diisi ulang berdasarkan GHP)
             if cols.get('day_start') and month_col_map:
                 for m_num, m_col_start in month_col_map.items():
@@ -638,7 +758,10 @@ def _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, pprp_e
     Mengembalikan row_end blok setelah semua sisipan (posisi baris terakhir blok saat ini).
     """
     row_end = row_start + block_len - 1
-    for pprp in reversed(pprp_entries):
+    # Iterasi kronologis (entries sudah terurut naik oleh _assign_pprp_periods);
+    # hanya entri dengan periode_semula terisi (entri pertama) yang menulis
+    # ulang periode blok induk.
+    for pprp in pprp_entries:
         if cols.get('periode') and pprp.get('periode_semula'):
             periode_col = cols['periode']
             target_row = row_start
@@ -667,14 +790,17 @@ def _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, pprp_e
             ws.cell(top_row, cols['surat']).value = pprp['pprp_letter']
         if cols.get('tipe'):
             ws.cell(top_row, cols['tipe']).value = 'Perubahan'
-        if cols.get('etd') and pprp.get('std'):
-            ws.cell(top_row, cols['etd']).value = pprp['std']
-        if cols.get('eta') and pprp.get('sta'):
-            ws.cell(top_row, cols['eta']).value = pprp['sta']
-        if cols.get('atd') and pprp.get('atd'):
-            ws.cell(top_row, cols['atd']).value = pprp['atd']
-        if cols.get('ata') and pprp.get('ata'):
-            ws.cell(top_row, cols['ata']).value = pprp['ata']
+        # Jam baris MENJADI: ETD = STD GHP dikonversi UTC (kosong bila GHP belum
+        # ada), ETA = STA surat PPRP (UTC), ATD/ATA = jam WTT (Local). Selalu
+        # ditulis agar nilai warisan salinan blok induk tidak tertinggal.
+        if cols.get('etd'):
+            ws.cell(top_row, cols['etd']).value = pprp.get('etd_utc')
+        if cols.get('eta'):
+            ws.cell(top_row, cols['eta']).value = pprp.get('sta')
+        if cols.get('atd'):
+            ws.cell(top_row, cols['atd']).value = pprp.get('atd')
+        if cols.get('ata'):
+            ws.cell(top_row, cols['ata']).value = pprp.get('ata')
 
         if cols.get('day_start') and month_col_map:
             for m_num, m_col_start in month_col_map.items():
@@ -722,6 +848,7 @@ def generate_rekap_report(output_path: str) -> int:
                 'pprp_list': [],
                 'daily': {},
                 'first_seen': None,
+                'v1_times': {},  # flight_date -> (std, sta) murni WTT, untuk ATD/ATA
             }
 
         fd = flight_data[fn]
@@ -740,42 +867,47 @@ def generate_rekap_report(output_path: str) -> int:
                 fd['wtt_start_date'] = sv.flight_date
             if fd['wtt_end_date'] is None or sv.flight_date > fd['wtt_end_date']:
                 fd['wtt_end_date'] = sv.flight_date
+            # ATD/ATA laporan = jam WTT (Local); pakai std/sta v1 yang selalu
+            # murni WTT (kolom atd v1 bisa tercemar data GHP lama).
             if not fd['wtt']:
                 fd['wtt'] = {
                     'std': sv.std.strftime('%H:%M') if sv.std else None,
                     'sta': sv.sta.strftime('%H:%M') if sv.sta else None,
-                    'atd': sv.atd.strftime('%H:%M') if sv.atd else None,
-                    'ata': sv.ata.strftime('%H:%M') if sv.ata else None,
+                    'atd': sv.std.strftime('%H:%M') if sv.std else None,
+                    'ata': sv.sta.strftime('%H:%M') if sv.sta else None,
                 }
+            fd['v1_times'][sv.flight_date] = (
+                sv.std.strftime('%H:%M') if sv.std else None,
+                sv.sta.strftime('%H:%M') if sv.sta else None,
+            )
         elif sv.pprp_letter:
-            existing_letters = [p['pprp_letter'] for p in fd['pprp_list']]
-            if sv.pprp_letter not in existing_letters:
+            # Satu record per SEGMEN (surat + tanggal mulai berlaku) — satu surat
+            # bisa memuat >1 segmen jadwal untuk flight yang sama.
+            entry = next((p for p in fd['pprp_list']
+                          if p['pprp_letter'] == sv.pprp_letter and p['pprp_date'] == sv.pprp_date), None)
+            if entry is None:
                 fd['pprp_list'].append({
                     'pprp_letter': sv.pprp_letter,
                     'pprp_date': sv.pprp_date,
                     'periode': '',
                     'std': sv.std.strftime('%H:%M') if sv.std else None,
                     'sta': sv.sta.strftime('%H:%M') if sv.sta else None,
-                    'atd': sv.atd.strftime('%H:%M') if sv.atd else None,
-                    'ata': sv.ata.strftime('%H:%M') if sv.ata else None,
+                    'ghp_std': sv.ghp_std,               # STD GHP (Local) untuk kolom ETD
+                    'ghp_atd': sv.ghp_atd,               # ATD aktual GHP (Local), fallback ATD non-WTT
                     'source_pprp_path': sv.source_pprp.file_path if sv.source_pprp else None,
                 })
-
-    for fn, fd in flight_data.items():
-        wtt_start = fd.get('wtt_start_date')
-        wtt_end = fd.get('wtt_end_date')
-        for pprp in fd['pprp_list']:
-            d_pprp = pprp.get('pprp_date')
-            if not d_pprp:
-                continue
-            import datetime as _dt
-            semula_end = d_pprp - _dt.timedelta(days=1)
-            if wtt_start:
-                pprp['periode_semula'] = f"{wtt_start.day} {MONTH_ABBR[wtt_start.month]} {wtt_start.year}/{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
             else:
-                pprp['periode_semula'] = ''
-            if wtt_end:
-                pprp['periode'] = f"{d_pprp.day} {MONTH_ABBR[d_pprp.month]} {d_pprp.year}/{wtt_end.day} {MONTH_ABBR[wtt_end.month]} {wtt_end.year}"
+                # Pakai data GHP dari tanggal paling awal segmen yang memilikinya
+                if entry.get('ghp_std') is None and sv.ghp_std:
+                    entry['ghp_std'] = sv.ghp_std
+                if entry.get('ghp_atd') is None and sv.ghp_atd:
+                    entry['ghp_atd'] = sv.ghp_atd
+
+    pdf_cache = {}
+    for fn, fd in flight_data.items():
+        _assign_pprp_periods(fn, fd, pdf_cache)
+        for pprp in fd['pprp_list']:
+            _resolve_menjadi_times(fd, pprp)
 
     wb = load_workbook(template_path)
     ws = wb.active
@@ -841,27 +973,21 @@ def generate_rekap_report(output_path: str) -> int:
         insert_cursor = tmpl_start + tmpl_len - 1  # = row akhir blok terakhir saat ini
 
         for fn, fd in new_flights:
-            pprp_sorted = sorted(
-                fd['pprp_list'],
-                key=lambda p: p.get('pprp_date') or datetime.date.max
-            )
+            pprp_sorted = fd['pprp_list']  # sudah terurut kronologis oleh _assign_pprp_periods
             first_pprp = pprp_sorted[0]
 
-            # Re-parse PDF PPRP asli untuk ambil tanggal akhir berlaku + tipe
-            # permohonan (tidak tersimpan di DB, hanya ada di file sumber).
-            end_date = None
+            # Ambil tipe permohonan dari PDF surat pertama (tidak tersimpan di DB).
             submission_type = 'Penambahan'
             pdf_path = first_pprp.get('source_pprp_path')
             if pdf_path and os.path.exists(pdf_path):
-                try:
-                    parsed = _parse_pprp_file(pdf_path)
-                    submission_type = parsed.get('submission_type') or submission_type
-                    for f in parsed.get('flights', []):
-                        if _normalize_flight(f['flight_number']) == fn:
-                            end_date = f.get('end_date')
-                            break
-                except Exception:
-                    pass
+                if pdf_path not in pdf_cache:
+                    try:
+                        pdf_cache[pdf_path] = _parse_pprp_file(pdf_path)
+                    except Exception:
+                        pdf_cache[pdf_path] = None
+                parsed = pdf_cache[pdf_path]
+                if parsed and parsed.get('submission_type'):
+                    submission_type = parsed['submission_type']
 
             insert_at = insert_cursor + 1
             ws.insert_rows(insert_at, tmpl_len)
@@ -880,21 +1006,23 @@ def generate_rekap_report(output_path: str) -> int:
             if cols.get('to'):
                 ws.cell(top_row, cols['to']).value = route_str
 
-            src_times = fd.get('wtt') or first_pprp
-            if cols.get('etd') and src_times.get('std'):
-                ws.cell(top_row, cols['etd']).value = src_times['std']
-            if cols.get('eta') and src_times.get('sta'):
-                ws.cell(top_row, cols['eta']).value = src_times['sta']
-            if cols.get('atd') and src_times.get('atd'):
-                ws.cell(top_row, cols['atd']).value = src_times['atd']
-            if cols.get('ata') and src_times.get('ata'):
-                ws.cell(top_row, cols['ata']).value = src_times['ata']
+            # Flight baru: aturan jam sama dengan baris MENJADI — ETD = STD GHP
+            # dikonversi UTC (kosong bila GHP belum ada), ETA = STA surat PPRP
+            # (UTC), ATD/ATA = jam WTT bila flight muncul di WTT (umumnya kosong
+            # untuk rute yang benar-benar baru).
+            if cols.get('etd'):
+                ws.cell(top_row, cols['etd']).value = first_pprp.get('etd_utc')
+            if cols.get('eta'):
+                ws.cell(top_row, cols['eta']).value = first_pprp.get('sta')
+            if cols.get('atd'):
+                ws.cell(top_row, cols['atd']).value = first_pprp.get('atd')
+            if cols.get('ata'):
+                ws.cell(top_row, cols['ata']).value = first_pprp.get('ata')
 
-            if end_date and first_pprp.get('pprp_date'):
-                d1, d2 = first_pprp['pprp_date'], end_date
-                periode_str = f"{d1.day} {MONTH_ABBR[d1.month]} {d1.year}/{d2.day} {MONTH_ABBR[d2.month]} {d2.year}"
-            else:
-                periode_str = 'PERLU REVIEW - SURAT TIDAK TERBACA'
+            # Periode segmen pertama sudah dihitung _assign_pprp_periods
+            # (dipotong sebelum segmen berikutnya; segmen terakhir memakai
+            # tanggal akhir berlaku dari PDF surat).
+            periode_str = first_pprp.get('periode') or 'PERLU REVIEW - SURAT TIDAK TERBACA'
             if cols.get('periode'):
                 ws.cell(top_row, cols['periode']).value = periode_str
             if cols.get('surat') and first_pprp.get('pprp_letter'):
@@ -904,26 +1032,11 @@ def generate_rekap_report(output_path: str) -> int:
 
             block_end = insert_at + tmpl_len - 1
 
-            # Kalau flight baru ini sudah punya >1 surat PPRP, sisipkan sub-blok
-            # tambahan pakai mekanisme yang sama seperti flight lama (pakai
-            # surat pertama & end_date hasil re-parse sebagai jangkar periode,
-            # menggantikan peran wtt_start/wtt_end yang tidak dimiliki flight baru).
-            if len(pprp_sorted) > 1 and end_date and first_pprp.get('pprp_date'):
-                anchor_start = first_pprp['pprp_date']
-                anchor_end = end_date
-                for extra in pprp_sorted[1:]:
-                    d_p = extra.get('pprp_date')
-                    if not d_p:
-                        continue
-                    semula_end = d_p - datetime.timedelta(days=1)
-                    extra['periode_semula'] = (
-                        f"{anchor_start.day} {MONTH_ABBR[anchor_start.month]} {anchor_start.year}/"
-                        f"{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
-                    )
-                    extra['periode'] = (
-                        f"{d_p.day} {MONTH_ABBR[d_p.month]} {d_p.year}/"
-                        f"{anchor_end.day} {MONTH_ABBR[anchor_end.month]} {anchor_end.year}"
-                    )
+            # Kalau flight baru ini punya >1 segmen PPRP, sisipkan sub-blok
+            # tambahan; periode tiap segmen sudah dihitung _assign_pprp_periods
+            # (segmen non-terakhir dipotong sehari sebelum segmen berikutnya,
+            # segmen terakhir memakai tanggal akhir berlaku dari PDF surat).
+            if len(pprp_sorted) > 1:
                 block_end = _insert_pprp_subblocks(
                     ws, cols, month_col_map, insert_at, tmpl_len, pprp_sorted[1:], latest_project.year
                 )

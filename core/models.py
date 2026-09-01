@@ -79,6 +79,11 @@ class ScheduleVersion(models.Model):
     # Operational flag (from GHP match)
     operational_flag = models.BooleanField(default=False)  # 1 or 0
     delay_code = models.CharField(max_length=50, blank=True, null=True)
+
+    # Jam dari GHP (Local) — khusus konsumsi dashboard/analytics.
+    # Laporan final tidak boleh membaca kolom ini; atd/ata laporan bersumber WTT.
+    ghp_std = models.TimeField(null=True, blank=True)
+    ghp_atd = models.TimeField(null=True, blank=True)
     
     # Audit
     source_wtt = models.ForeignKey(SourceFile, null=True, on_delete=models.SET_NULL, related_name='wtt_schedules')

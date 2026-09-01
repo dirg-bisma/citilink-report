@@ -4,7 +4,34 @@ from core.models import Project, SourceFile, ScheduleVersion
 from core.parsers.wtt import parse_wtt
 from core.parsers.pprp import parse_pprp
 from core.parsers.ghp import parse_ghp
-from datetime import datetime
+from datetime import datetime, timedelta
+
+# Zona waktu sumber data (tertulis eksplisit di masing-masing dokumen):
+# - WTT PDF  : "Times in Local"           -> STD/STA/ATD/ATA Local
+# - PPRP PDF : "Jadwal Penerbangan (UTC)" -> STD/STA UTC
+# - GHP Excel: jam Local (konsisten dengan WTT)
+# Helper konversi di bawah dipakai a.l. oleh report untuk mengubah STD GHP
+# (Local) menjadi UTC. Offset tergantung bandara: SUB selalu WIB, lainnya bervariasi.
+WITA_AIRPORTS = {'DPS', 'UPG', 'LOP', 'BPN', 'AAP', 'BDJ', 'MDC', 'KDI', 'PLW', 'KOE', 'TRK', 'LBJ', 'BMU', 'TMC', 'MOF'}
+WIT_AIRPORTS = {'AMQ', 'DJJ', 'SOQ', 'TIM', 'TTE', 'MKQ'}
+
+
+def _utc_offset_for_airport(iata_code):
+    code = (iata_code or '').strip().upper()
+    if code in WIT_AIRPORTS:
+        return 9
+    if code in WITA_AIRPORTS:
+        return 8
+    return 7  # WIB default
+
+
+def _utc_time_to_local(time_obj, offset_hours):
+    """Tambahkan offset zona waktu ke objek time (wraparound tengah malam diabaikan,
+    karena ScheduleVersion.std/atd hanya TimeField, bukan datetime)."""
+    if time_obj is None:
+        return None
+    dummy = datetime.combine(datetime(2000, 1, 1), time_obj) + timedelta(hours=offset_hours)
+    return dummy.time()
 
 
 def delete_source_file(source_file_id: int) -> dict:
@@ -27,8 +54,9 @@ def delete_source_file(source_file_id: int) -> dict:
             deleted_tuple = ScheduleVersion.objects.filter(project=project, source_pprp=source_file).delete()
             affected_count = deleted_tuple[0]
         elif file_type == 'GHP':
-            # Reset operational flag for all schedules in this project
-            affected_count = ScheduleVersion.objects.filter(project=project, operational_flag=True).update(operational_flag=False)
+            # Reset operational flag + jam GHP for all schedules in this project
+            affected_count = ScheduleVersion.objects.filter(project=project, operational_flag=True).update(
+                operational_flag=False, ghp_std=None, ghp_atd=None)
             
         # Delete SourceFile model
         source_file.delete()
@@ -142,9 +170,15 @@ def process_pprp(project_id: int, pprp_file_id: int):
                     parent.is_active = False
                     parent.save()
 
-                # Create or update PPRP Version 2 record for this date
+                # Create or update PPRP Version 2 record for this date.
+                # STD/STA disimpan apa adanya dari surat PPRP (UTC).
+                # ATD/ATA laporan bersumber dari WTT (Local) — diambil dari baris
+                # WTT (v1) tanggal yang sama via std/sta-nya, yang selalu murni
+                # nilai WTT (kolom atd v1 bisa tercemar data GHP lama).
                 std_time = parse_time_str(flight.get('std'))
                 sta_time = parse_time_str(flight.get('sta'))
+                atd_time = parent.std if parent else None
+                ata_time = parent.sta if parent else None
                 ScheduleVersion.objects.update_or_create(
                     project=project,
                     flight_number=f_num,
@@ -157,8 +191,8 @@ def process_pprp(project_id: int, pprp_file_id: int):
                         'destination': flight['destination'],
                         'std': std_time,
                         'sta': sta_time,
-                        'atd': std_time,
-                        'ata': sta_time,
+                        'atd': atd_time,
+                        'ata': ata_time,
                         'pprp_letter': data['letter_number'],
                         'pprp_date': flight['pprp_date'],
                         'source_wtt': parent.source_wtt if parent else None,
@@ -171,6 +205,26 @@ def process_pprp(project_id: int, pprp_file_id: int):
     pprp_file.save()
     return created
 
+
+
+def _ghp_std_distance(schedule, rec):
+    """
+    Selisih menit (sirkular, 0-720) antara STD baris GHP dan jadwal resmi
+    schedule tsb dalam Local: baris v1 pakai std WTT apa adanya (sudah Local),
+    baris v2/PPRP pakai std surat (UTC) dikonversi ke Local bandara asal.
+    None bila salah satu jam tidak tersedia (tidak bisa dibandingkan).
+    """
+    ghp_std = parse_time_str(rec.get('std'))
+    if ghp_std is None or schedule.std is None:
+        return None
+    if schedule.pprp_letter:
+        expected = _utc_time_to_local(schedule.std, _utc_offset_for_airport(schedule.origin))
+    else:
+        expected = schedule.std
+    m1 = ghp_std.hour * 60 + ghp_std.minute
+    m2 = expected.hour * 60 + expected.minute
+    d = abs(m1 - m2)
+    return min(d, 1440 - d)
 
 
 def parse_time_str(time_val):
@@ -197,7 +251,13 @@ def process_ghp(project_id: int, ghp_file_id: int):
     
     records = parse_ghp(ghp_file.file_path)
     matched = 0
-    
+    # Decision log Q3 (dipertajam): bila beberapa baris GHP cocok ke flight+tanggal
+    # yang sama (baris rotasi multileg ganda, contoh QG834 muncul sebagai
+    # 'QG834-QG815' jam 19:00 DAN 'QG833-QG834' jam 17:00), pilih baris yang STD
+    # GHP-nya PALING DEKAT dengan jadwal resmi baris itu (WTT untuk baris v1,
+    # surat PPRP untuk baris v2). Seri/tak terbandingkan -> baris pertama di file.
+    best = {}  # schedule.id -> {'schedule', 'rec', 'diff'}
+
     with transaction.atomic():
         for rec in records:
             # Match key: flight_num + date, prioritize active version
@@ -207,17 +267,32 @@ def process_ghp(project_id: int, ghp_file_id: int):
                 flight_number=rec['flight_number'],
                 flight_date=rec['flight_date'],
             ).order_by('-version_number').first()
-            
-            if schedule:
-                schedule.operational_flag = True
-                if rec.get('atd'):
-                    parsed_atd = parse_time_str(rec['atd'])
-                    if parsed_atd:
-                        schedule.atd = parsed_atd
-                if 'delay_code' in rec and rec['delay_code']:
-                    schedule.delay_code = rec['delay_code']
-                schedule.save()
-                matched += 1
+
+            if not schedule:
+                continue
+
+            diff = _ghp_std_distance(schedule, rec)
+            cur = best.get(schedule.id)
+            if cur is None or (diff is not None and (cur['diff'] is None or diff < cur['diff'])):
+                best[schedule.id] = {'schedule': schedule, 'rec': rec, 'diff': diff}
+
+        for item in best.values():
+            schedule, rec = item['schedule'], item['rec']
+            schedule.operational_flag = True
+            # Jam GHP disimpan di kolom khusus dashboard (ghp_std/ghp_atd).
+            # Kolom atd/ata laporan (sumber: WTT) TIDAK boleh ditimpa GHP.
+            if rec.get('std'):
+                parsed_std = parse_time_str(rec['std'])
+                if parsed_std:
+                    schedule.ghp_std = parsed_std
+            if rec.get('atd'):
+                parsed_atd = parse_time_str(rec['atd'])
+                if parsed_atd:
+                    schedule.ghp_atd = parsed_atd
+            if 'delay_code' in rec and rec['delay_code']:
+                schedule.delay_code = rec['delay_code']
+            schedule.save()
+            matched += 1
     
     ghp_file.status = 'SUCCESS'
     ghp_file.save()

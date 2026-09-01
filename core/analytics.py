@@ -74,17 +74,23 @@ def otp_metric(project_id: int, start_day: int = None, end_day: int = None) -> d
     gt_count = 0
     
     for f in flights:
+        # Dashboard memakai jam GHP (FSD-019: sumber dashboard terpisah dari
+        # laporan final). Fallback ke kolom lama untuk data legacy yang kolom
+        # GHP-nya belum terisi (terisi saat file GHP di-upload ulang).
+        g_std = f.ghp_std or f.std
+        g_atd = f.ghp_atd or f.atd
+
         # Category
         cat = parse_flight_category(f.flight_number)
         if cat == 'CHRT/XTRA':
             chrt_count += 1
         else:
             reg_count += 1
-            
+
         # OTP Dep (STD vs ATD) -> Standard OTP-15 tolerance (15 minutes)
-        if f.std and f.atd:
-            std_min = f.std.hour * 60 + f.std.minute
-            atd_min = f.atd.hour * 60 + f.atd.minute
+        if g_std and g_atd:
+            std_min = g_std.hour * 60 + g_std.minute
+            atd_min = g_atd.hour * 60 + g_atd.minute
             diff_dep = atd_min - std_min
             if diff_dep < -720: diff_dep += 1440
             elif diff_dep > 720: diff_dep -= 1440
@@ -104,11 +110,11 @@ def otp_metric(project_id: int, start_day: int = None, end_day: int = None) -> d
                 delayed_arr += 1
 
         # Ground time calculation if ATA & ATD present
-        if f.ata and f.atd and f.sta and f.std:
+        if f.ata and g_atd and f.sta and g_std:
             ata_m = f.ata.hour * 60 + f.ata.minute
-            atd_m = f.atd.hour * 60 + f.atd.minute
+            atd_m = g_atd.hour * 60 + g_atd.minute
             sta_m = f.sta.hour * 60 + f.sta.minute
-            std_m = f.std.hour * 60 + f.std.minute
+            std_m = g_std.hour * 60 + g_std.minute
             
             agt = atd_m - ata_m
             if agt < 0: agt += 1440
@@ -159,9 +165,12 @@ def pprp_achievement(project_id: int, month: int, start_day: int = None, end_day
     
     on_time = 0
     for f in flights:
-        if f.std and f.atd:
-            std_min = f.std.hour * 60 + f.std.minute
-            atd_min = f.atd.hour * 60 + f.atd.minute
+        # Jam GHP untuk dashboard; fallback kolom lama untuk data legacy.
+        g_std = f.ghp_std or f.std
+        g_atd = f.ghp_atd or f.atd
+        if g_std and g_atd:
+            std_min = g_std.hour * 60 + g_std.minute
+            atd_min = g_atd.hour * 60 + g_atd.minute
             diff = atd_min - std_min
             if diff < -720: diff += 1440
             elif diff > 720: diff -= 1440
@@ -190,9 +199,12 @@ def delay_factors(project_id: int, start_day: int = None, end_day: int = None) -
     }
 
     for f in flights:
-        if f.std and f.atd:
-            std_m = f.std.hour * 60 + f.std.minute
-            atd_m = f.atd.hour * 60 + f.atd.minute
+        # Jam GHP untuk dashboard; fallback kolom lama untuk data legacy.
+        g_std = f.ghp_std or f.std
+        g_atd = f.ghp_atd or f.atd
+        if g_std and g_atd:
+            std_m = g_std.hour * 60 + g_std.minute
+            atd_m = g_atd.hour * 60 + g_atd.minute
             diff = atd_m - std_m
             if diff < -720: diff += 1440
             elif diff > 720: diff -= 1440
@@ -254,9 +266,12 @@ def daily_otp_trend(project_id: int, start_day: int = None, end_day: int = None)
         
         daily_map[d_str]['total'] += 1
 
-        if f.std and f.atd:
-            std_m = f.std.hour * 60 + f.std.minute
-            atd_m = f.atd.hour * 60 + f.atd.minute
+        # Jam GHP untuk dashboard; fallback kolom lama untuk data legacy.
+        g_std = f.ghp_std or f.std
+        g_atd = f.ghp_atd or f.atd
+        if g_std and g_atd:
+            std_m = g_std.hour * 60 + g_std.minute
+            atd_m = g_atd.hour * 60 + g_atd.minute
             diff = atd_m - std_m
             if diff < -720: diff += 1440
             elif diff > 720: diff -= 1440
