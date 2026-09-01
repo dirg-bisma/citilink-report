@@ -385,9 +385,12 @@
     <!-- TOP ACTION BAR -->
     <div class="top-navbar">
         <div class="nav-left">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
                 <span class="material-symbols-outlined" style="color: #006b32; font-size: 26px;">flight_takeoff</span>
-                <span style="font-weight: 800; font-size: 16px; color: #111827;">Citilink FSRS</span>
+                <div>
+                    <div style="font-size: 15px; letter-spacing: 0.08em;"><span style="font-weight: 800; color: #006b32;">CITILINK</span> <span style="font-weight: 800; color: #111827;">AVIOR</span></div>
+                    <div style="font-size: 10.5px; color: #6b7280;">AViation Operations Report</div>
+                </div>
             </div>
             <span class="badge-project">{{ project.project_id }} ({{ report.month_name }} {{ report.year }})</span>
             <span style="font-size: 12px; color: #6b7280;">• Total Flight Rows: <strong>{{ report.total_flight_groups }}</strong></span>

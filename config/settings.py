@@ -154,8 +154,9 @@ UNFOLD = {
     "STYLES": [
         lambda request: "/static/css/unfold_override.css?v=2",
     ],
-    "SITE_TITLE": "Citilink Admin",
-    "SITE_HEADER": "Citilink FSRS",
+    "SITE_TITLE": "CITILINK AVIOR",
+    "SITE_HEADER": "CITILINK AVIOR",
+    "SITE_SUBHEADER": "AViation Operations Report",
     "SITE_URL": "/",
     "COLORS": {
         "primary": {
