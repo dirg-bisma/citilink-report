@@ -230,6 +230,18 @@ class ReportCellsTests(TestCase):
                 excel = self.rekap.cell(flight.replace('-', ''), 0, 7, i + 1)
                 self.assertEqual(cell['val'], '' if excel is None else str(excel), f'{flight} hari {i + 1}')
 
+    def test_stale_charter_rows_in_db_never_reach_the_report(self):
+        """Baris charter yang dimuat kode lama masih bisa ada di DB; laporan harus mengabaikannya."""
+        from core.models import ScheduleVersion
+        ScheduleVersion.objects.create(
+            project=self.maret, flight_number='QG9177', origin='SUB', destination='HLP',
+            flight_date=D(2026, 3, 19), std=datetime.time(8, 35), sta=datetime.time(10, 5), is_active=True)
+
+        data = get_project_report_data(self.maret.id)
+
+        self.assertNotIn('QG-9177', [r['flight_number'] for r in data['rows']])
+        self.assertNotIn('QG9177', [r['flight_number'] for r in data['rows']])
+
     def test_preview_lists_permitted_flight_absent_from_wtt(self):
         data = get_project_report_data(self.maret.id)
         qg719 = [r for r in data['rows'] if r['flight_number'] == 'QG-719']

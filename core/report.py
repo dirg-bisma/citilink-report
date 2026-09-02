@@ -352,6 +352,11 @@ def _build_flight_data(schedules):
     """
     flight_data = {}
     for sv in schedules:
+        # Charter/extra flight (4 digit) tidak masuk laporan. Pemuat sudah
+        # menyaringnya sejak 2026-09-02, tapi baris yang dimuat kode lama bisa
+        # masih tersimpan — laporan tidak boleh bergantung pada kebersihan DB.
+        if is_charter_flight(sv.flight_number):
+            continue
         fn = _normalize_flight(sv.flight_number)
         if fn not in flight_data:
             flight_data[fn] = {
