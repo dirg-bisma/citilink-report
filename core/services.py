@@ -83,9 +83,16 @@ def process_wtt(project_id: int, wtt_file_id: int):
     wtt_file = SourceFile.objects.get(id=wtt_file_id)
     
     records = parse_wtt(wtt_file.file_path)
-    
+    created = 0
+
     with transaction.atomic():
         for rec in records:
+            # Hanya keberangkatan dari Surabaya. WTT memuat jadwal seluruh
+            # station; leg masuk ke SUB dan rute station lain bukan tanggung
+            # jawab laporan ini (sama seperti filter di process_pprp).
+            if rec.get('origin') != 'SUB':
+                continue
+            created += 1
             ScheduleVersion.objects.create(
                 project=project,
                 parent_version=None,
@@ -105,7 +112,7 @@ def process_wtt(project_id: int, wtt_file_id: int):
     
     wtt_file.status = 'SUCCESS'
     wtt_file.save()
-    return len(records)
+    return created
 
 
 def process_pprp(project_id: int, pprp_file_id: int):
