@@ -5,10 +5,8 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core.files.storage import FileSystemStorage
 from django.http import JsonResponse
 from core.models import Project, SourceFile
-from core.services import process_wtt, process_pprp, process_ghp, delete_source_file
-from core.parsers.wtt import detect_wtt_period
-from core.parsers.pprp import detect_pprp_period
-from core.parsers.ghp import detect_ghp_period
+from core.services import delete_source_file
+from core.ingest import ingest_uploaded_files
 
 MONTH_NAMES = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April',
@@ -52,148 +50,79 @@ def upload_source_file_view(request):
                 messages.error(request, f"Error deleting file: {str(e)}")
                 return redirect('custom_upload')
         
-        # 2. Action: UPLOAD SourceFile
+        # 2. Action: UPLOAD SourceFile — semua jenis file lewat satu pintu
+        # (core.ingest), sama persis dengan tombol Upload PPRP di menu Project.
         file_type = request.POST.get('file_type')
         uploaded_files = request.FILES.getlist('file')
         project_id = request.POST.get('project_id')
-        
+
         if not file_type or not uploaded_files:
             error_msg = "Pilih minimal 1 file untuk diunggah."
             if is_ajax:
                 return JsonResponse({'success': False, 'message': error_msg}, status=400)
             messages.error(request, error_msg)
             return redirect('custom_upload')
-            
-        try:
-            for uploaded_file in uploaded_files:
-                # Read content for hash
-                file_content = uploaded_file.read()
-                file_hash = SourceFile.compute_hash(file_content)
-                uploaded_file.seek(0)  # Reset pointer
-                
-                # Save file temporarily to disk so parsers can read it
-                fs = FileSystemStorage(location=os.path.join('media', 'uploads'))
-                filename = fs.save(uploaded_file.name, uploaded_file)
-                file_path = fs.path(filename)
-                
-                # Auto-detect period or get project
-                if file_type == 'WTT':
-                    month, year = detect_wtt_period(file_path)
-                    project_id_str = f"PRJ-{year}{int(month):02d}"
-                    period_str = f"{year}-{int(month):02d}"
-                    project, created = Project.objects.get_or_create(
-                        month=int(month),
-                        year=int(year),
-                        defaults={
-                            'project_id': project_id_str,
-                            'period': period_str,
-                            'created_by': request.user
-                        }
-                    )
-                else:
-                    if project_id:
-                        project = Project.objects.get(id=int(project_id))
-                    else:
-                        # Fallback to most recent project
-                        project = Project.objects.order_by('-created_at').first()
-                        if not project:
-                            raise ValueError("Belum ada Project aktif. Silakan upload file WTT terlebih dahulu.")
-                    
-                    # Validate month against project
-                    if file_type == 'PPRP':
-                        p_month, p_year = detect_pprp_period(file_path)
-                        if p_month != project.month or p_year != project.year:
-                            # Remove file before raising
-                            if os.path.exists(file_path):
-                                os.remove(file_path)
-                            detected_name = f"{MONTH_NAMES.get(p_month, p_month)} {p_year}"
-                            proj_name = f"{MONTH_NAMES.get(project.month, project.month)} {project.year}"
-                            raise ValueError(f"File PPRP terdeteksi untuk periode {detected_name}, tidak cocok dengan Project aktif ({proj_name}).")
-                    elif file_type == 'GHP':
-                        g_month = detect_ghp_period(file_path)
-                        if g_month != project.month:
-                            if os.path.exists(file_path):
-                                os.remove(file_path)
-                            detected_name = MONTH_NAMES.get(g_month, g_month)
-                            proj_name = f"{MONTH_NAMES.get(project.month, project.month)} {project.year}"
-                            raise ValueError(f"File GHP terdeteksi untuk bulan {detected_name}, tidak cocok dengan Project aktif ({proj_name}).")
 
-                # Duplicate check
-                if SourceFile.objects.filter(project=project, file_type=file_type, file_hash=file_hash).exists():
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                    msg = f"File {uploaded_file.name} sudah pernah diupload untuk project ini."
-                    if is_ajax:
-                        return JsonResponse({'success': False, 'message': msg}, status=400)
-                    messages.warning(request, msg)
-                    continue
+        # Mode Atur Ulang: file WTT/GHP boleh menggantikan file sejenis yang
+        # sudah ada (dikonfirmasi dulu di browser).
+        replace = request.POST.get('replace') in ('1', 'true', 'on')
 
-                # Create SourceFile record
-                source_file = SourceFile.objects.create(
-                    project=project,
-                    file_type=file_type,
-                    file_path=file_path,
-                    file_hash=file_hash,
-                    uploaded_by=request.user,
-                    status='PROCESSING'
-                )
-
-                # Process
-                if file_type == 'WTT':
-                    processed_count = process_wtt(project.id, source_file.id)
-                elif file_type == 'PPRP':
-                    processed_count = process_pprp(project.id, source_file.id)
-                elif file_type == 'GHP':
-                    processed_count = process_ghp(project.id, source_file.id)
-                else:
-                    processed_count = 0
-                    source_file.status = 'SUCCESS'
-                    source_file.save()
-
-                # Contextual detail per file type
-                detail_labels = {
-                    'WTT': 'jadwal penerbangan tercreate',
-                    'GHP': 'jadwal penerbangan terverifikasi (operational flag)',
-                    'PPRP': 'jadwal penerbangan terdampak perubahan PPRP',
-                }
-                detail = detail_labels.get(file_type, 'records processed')
-                msg = f"File {uploaded_file.name} berhasil diupload! ({processed_count} {detail})"
-
+        # Untuk WTT, project tetap ditentukan dari PDF; project_id (bila ada)
+        # hanya dipakai sebagai pengaman bahwa bulannya cocok.
+        project = None
+        if project_id:
+            try:
+                project = Project.objects.get(id=int(project_id))
+            except (Project.DoesNotExist, ValueError):
+                error_msg = "Project aktif tidak ditemukan. Muat ulang halaman lalu coba lagi."
                 if is_ajax:
-                    return JsonResponse({
-                        'success': True,
-                        'message': msg,
-                        'processed_count': processed_count,
-                        'file_type': file_type,
-                        'detail': detail,
-                        'file_id': source_file.id,
-                        'project_id': project.id,
-                        'project_code': project.project_id,
-                        'period_name': f"{MONTH_NAMES.get(project.month, project.month)} {project.year}",
-                    })
-                messages.success(request, msg)
+                    return JsonResponse({'success': False, 'message': error_msg}, status=400)
+                messages.error(request, error_msg)
+                return redirect('custom_upload')
 
+        try:
+            result = ingest_uploaded_files(file_type, uploaded_files, request.user,
+                                           project=project, replace=replace)
         except Exception as e:
-            if 'source_file' in locals() and source_file.id:
-                try:
-                    source_file.delete()
-                except Exception:
-                    pass
-            if 'file_path' in locals() and os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
             if is_ajax:
                 return JsonResponse({'success': False, 'message': str(e)}, status=400)
             messages.error(request, f"Error: {str(e)}")
-
-        if not is_ajax:
             return redirect('custom_upload')
+
+        if is_ajax:
+            return JsonResponse(result.as_dict(), status=200 if result.success else 400)
+
+        level = {'processed': messages.success, 'skipped': messages.warning, 'failed': messages.error}
+        for fr in result.files:
+            level[fr.status](request, f"{fr.filename}: {fr.message}")
+            for w in fr.warnings:
+                messages.warning(request, w)
+        for msg in result.resync_messages:
+            messages.info(request, msg)
+        for w in result.warnings:
+            messages.warning(request, w)
+        return redirect('custom_upload')
+
+    # Peta file yang sudah ada per project -> dipakai tombol Atur Ulang untuk
+    # menanyakan "ganti file X dengan Y?" sebelum upload WTT/GHP.
+    existing_files = {}
+    for sf in SourceFile.objects.order_by('uploaded_at', 'id'):
+        entry = existing_files.setdefault(str(sf.project_id), {'WTT': None, 'GHP': None, 'PPRP': []})
+        name = os.path.basename(sf.file_path)
+        if sf.file_type == 'PPRP':
+            entry['PPRP'].append(name)
+        else:
+            entry[sf.file_type] = name
+    project_options = [
+        {'id': p.id, 'code': p.project_id, 'period_name': f"{MONTH_NAMES.get(p.month, p.month)} {p.year}"}
+        for p in Project.objects.order_by('-year', '-month')
+    ]
 
     context = admin.site.each_context(request)
     context.update({
         'projects': projects,
+        'project_options': project_options,
+        'existing_files': existing_files,
         'history': history,
         'title': 'Upload Data'
     })

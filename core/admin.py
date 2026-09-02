@@ -11,6 +11,7 @@ from unfold.decorators import display
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from core.models import Project, SourceFile, ScheduleVersion
 from core.services import process_wtt, process_pprp, process_ghp
+from core.ingest import ingest_uploaded_files
 from core.report import generate_report
 import os
 
@@ -31,7 +32,6 @@ class GroupAdmin(BaseGroupAdmin, ModelAdmin):
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.http import JsonResponse
-from django.core.files.storage import FileSystemStorage
 from core.report import get_project_report_data, generate_report, generate_rekap_report, INDONESIAN_MONTHS
 
 
@@ -96,68 +96,27 @@ class ProjectAdmin(ModelAdmin):
         return render(request, 'admin/core/project/report_view.html', context)
     
     def upload_pprp_view(self, request, project_id):
+        # Pintu yang sama dengan halaman Upload Data (core.ingest): semua file
+        # diproses satu per satu, hasil per file dilaporkan, GHP disinkronkan ulang.
         if request.method != 'POST':
             return JsonResponse({'success': False, 'message': 'Method POST required.'}, status=405)
-            
+
         uploaded_files = request.FILES.getlist('file')
         if not uploaded_files:
             return JsonResponse({'success': False, 'message': 'Pilih minimal 1 file PDF PPRP.'}, status=400)
-            
+
         try:
             project = Project.objects.get(id=project_id)
-            total_count = 0
-            processed_files_count = 0
-            skipped_files_count = 0
-            
-            for uploaded_file in uploaded_files:
-                file_content = uploaded_file.read()
-                file_hash = SourceFile.compute_hash(file_content)
-                uploaded_file.seek(0)
-                
-                # Skip duplicate file if already uploaded for this project
-                if SourceFile.objects.filter(project=project, file_type='PPRP', file_hash=file_hash).exists():
-                    skipped_files_count += 1
-                    continue
-                    
-                fs = FileSystemStorage(location=os.path.join('media', 'uploads'))
-                filename = fs.save(uploaded_file.name, uploaded_file)
-                file_path = fs.path(filename)
-                
-                source_file = SourceFile.objects.create(
-                    project=project,
-                    file_type='PPRP',
-                    file_path=file_path,
-                    file_hash=file_hash,
-                    uploaded_by=request.user,
-                    status='PROCESSING'
-                )
-                
-                count = process_pprp(project.id, source_file.id)
-                total_count += count
-                processed_files_count += 1
-                
-            # Smart Re-Sync: If GHP file exists for this project, re-match operational flags!
-            ghp_file = SourceFile.objects.filter(project=project, file_type='GHP', status='SUCCESS').first()
-            if ghp_file:
-                process_ghp(project.id, ghp_file.id)
-                    
-            if processed_files_count == 0 and skipped_files_count > 0:
-                return JsonResponse({'success': False, 'message': 'Seluruh file yang dipilih sudah pernah diupload sebelumnya.'}, status=400)
+        except Project.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Project tidak ditemukan.'}, status=404)
 
-            msg = f'Berhasil memproses {processed_files_count} file PPRP ({total_count} jadwal rute SUB terupdate).'
-            if skipped_files_count > 0:
-                msg += f' ({skipped_files_count} file duplikat dilewati).'
-
-            return JsonResponse({
-                'success': True,
-                'message': msg,
-                'count': total_count,
-                'files_count': processed_files_count,
-                'project_id': project.id,
-            })
+        try:
+            result = ingest_uploaded_files('PPRP', uploaded_files, request.user, project=project)
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)}, status=500)
-    
+
+        return JsonResponse(result.as_dict(), status=200 if result.success else 400)
+
     def download_report(self, request, project_id):
         import tempfile
         try:

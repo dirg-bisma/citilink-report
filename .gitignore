@@ -20,9 +20,11 @@ media/
 .vscode/
 .idea/
 *.xlsx
-test_*.py
+/test_*.py
 *.sql
 login.html
 prof.py
 prof*.txt
 profile*.txt
+# Backup database (lokal, jangan di-commit)
+backups/

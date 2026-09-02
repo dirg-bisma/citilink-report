@@ -85,6 +85,9 @@
                 <!-- Error Notification -->
                 <div id="modal-error-notif" class="hidden text-xs text-red-600 dark:text-red-400 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50"></div>
 
+                <!-- Hasil per file setelah upload sukses -->
+                <div id="modal-result-notif" class="hidden text-xs text-green-700 dark:text-green-300 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 max-h-64 overflow-y-auto"></div>
+
                 <!-- Action Buttons -->
                 <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-750">
                     <button type="button" onclick="closePprpModal()" class="px-5 py-2.5 text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 hover:text-gray-900 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-all cursor-pointer select-none shadow-2xs">
@@ -302,7 +305,45 @@
             const progressLabel = document.getElementById('modal-progress-label');
             const errorNotif = document.getElementById('modal-error-notif');
             
+            const resultNotif = document.getElementById('modal-result-notif');
+
             let currentProjectId = null;
+            // Setelah ada file yang berhasil masuk, daftar project harus dimuat
+            // ulang saat modal ditutup (dengan tombol apa pun).
+            let needsReload = false;
+
+            function escapeHtml(s) {
+                return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+            }
+
+            // Susun hasil per file dari core.ingest (diproses / dilewati / gagal
+            // + peringatan) supaya tidak ada file yang "hilang" tanpa laporan.
+            function formatIngestResult(result) {
+                const iconFor = {
+                    processed: ['check_circle', 'text-green-600 dark:text-green-400'],
+                    skipped: ['remove_circle', 'text-gray-400'],
+                    failed: ['cancel', 'text-red-600 dark:text-red-400']
+                };
+                let html = `<p class="font-semibold">${escapeHtml(result.message || '')}</p>`;
+                if (result.files && result.files.length) {
+                    html += '<ul class="mt-1.5 space-y-1">';
+                    for (const f of result.files) {
+                        const [icon, color] = iconFor[f.status] || iconFor.failed;
+                        html += `<li class="flex items-start gap-1.5"><span class="material-symbols-outlined text-[15px] mt-px ${color}">${icon}</span><span><span class="font-mono">${escapeHtml(f.filename)}</span> — ${escapeHtml(f.message)}</span></li>`;
+                        for (const w of (f.warnings || [])) {
+                            html += `<li class="ml-5 text-amber-700 dark:text-amber-300">⚠ ${escapeHtml(w)}</li>`;
+                        }
+                    }
+                    html += '</ul>';
+                }
+                if (result.resync && result.resync.length) {
+                    html += `<p class="mt-1.5 opacity-80">${result.resync.map(escapeHtml).join('<br>')}</p>`;
+                }
+                if (result.warnings && result.warnings.length) {
+                    html += `<div class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800/50 text-amber-800 dark:text-amber-200"><p class="font-semibold mb-1">Perlu diperiksa:</p><ul class="list-disc ml-4 space-y-0.5">${result.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`;
+                }
+                return html;
+            }
 
             // Global modal open function for PPRP
             window.openPprpModal = function(projectId, projectCode) {
@@ -310,13 +351,15 @@
                 currentProjectId = projectId;
                 pprpProjectIdInput.value = projectId;
                 pprpProjectCode.textContent = projectCode;
-                
+
                 // Reset form state
                 fileInput.value = '';
                 fileDisplay.classList.add('hidden');
                 btnUpload.disabled = true;
+                btnUpload.type = 'submit';
                 progressArea.classList.add('hidden');
                 errorNotif.classList.add('hidden');
+                resultNotif.classList.add('hidden');
                 btnUploadText.textContent = 'Upload Sekarang';
                 
                 pprpModal.classList.remove('hidden');
@@ -328,6 +371,10 @@
             };
 
             window.closePprpModal = function() {
+                if (needsReload) {
+                    window.location.reload();
+                    return;
+                }
                 toggleBackgroundBlur(false);
                 pprpModal.classList.add('opacity-0');
                 pprpModalCard.classList.remove('scale-100');
@@ -382,16 +429,25 @@
                         const result = await response.json();
 
                         if (response.ok && result.success) {
-                            progressLabel.textContent = 'Sukses!';
-                            btnUploadText.textContent = 'Berhasil!';
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 600);
+                            // Tampilkan hasil per file dulu (termasuk peringatan GHP);
+                            // halaman dimuat ulang saat pengguna menutup modal.
+                            needsReload = true;
+                            progressArea.classList.add('hidden');
+                            resultNotif.innerHTML = formatIngestResult(result);
+                            resultNotif.classList.remove('hidden');
+                            btnUpload.type = 'button';
+                            btnUpload.onclick = () => window.location.reload();
+                            btnUpload.disabled = false;
+                            btnUploadText.textContent = 'Tutup & Muat Ulang';
                         } else {
                             progressArea.classList.add('hidden');
                             btnUpload.disabled = false;
                             btnUploadText.textContent = 'Upload Sekarang';
-                            errorNotif.textContent = result.message || 'Terjadi kesalahan saat upload.';
+                            if (result && result.files) {
+                                errorNotif.innerHTML = formatIngestResult(result);
+                            } else {
+                                errorNotif.textContent = (result && result.message) || 'Terjadi kesalahan saat upload.';
+                            }
                             errorNotif.classList.remove('hidden');
                         }
                     } catch (error) {

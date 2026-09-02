@@ -81,11 +81,28 @@
                             </p>
                         </div>
                     </div>
-                    <div id="period-badge-container" class="hidden">
-                        <span id="detected-period-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700">
-                            <span class="material-symbols-outlined text-xs">verified</span>
-                            <span id="detected-period-text">Juli 2026</span>
-                        </span>
+                    <div class="flex items-center gap-3 flex-wrap justify-end">
+                        <div id="period-badge-container" class="hidden">
+                            <span id="detected-period-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700">
+                                <span class="material-symbols-outlined text-xs">verified</span>
+                                <span id="detected-period-text">Juli 2026</span>
+                            </span>
+                        </div>
+                        <!-- Atur Ulang: buka semua kartu untuk bulan yang sudah ada, supaya
+                             satu file (mis. GHP) bisa diganti tanpa membongkar dari WTT.
+                             Menekan tombol ini sendiri TIDAK mengubah data apa pun. -->
+                        <div class="flex items-center gap-2" id="reset-mode-control" title="Buka kembali kartu upload untuk bulan yang sudah ada, agar satu file bisa diganti">
+                            <select id="reset-project-select" class="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 focus:ring-2 focus:ring-[#006b32] focus:border-[#006b32]">
+                                <option value="">— pilih bulan —</option>
+                                {% for p in project_options %}
+                                <option value="{{ p.id }}" data-code="{{ p.code }}" data-period="{{ p.period_name }}">{{ p.period_name }} ({{ p.code }})</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" id="btn-reset-mode" disabled class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-lg text-white shadow-sm hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;">
+                                <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                                <span>Atur Ulang</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -329,6 +346,36 @@
         
     </div>
 
+    {{ existing_files|json_script:"existing-files" }}
+
+    <!-- MODAL KONFIRMASI GANTI FILE (mode Atur Ulang) -->
+    <div id="replace-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700 transform transition-all scale-95 duration-200" id="replace-modal-card">
+            <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-2xl">swap_horiz</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100" id="replace-title"></h3>
+                    <dl class="mt-3 text-sm space-y-1.5">
+                        <div class="flex gap-2"><dt class="w-12 shrink-0 text-gray-500">Lama</dt><dd id="replace-old" class="font-mono text-gray-900 dark:text-gray-100 break-all"></dd></div>
+                        <div class="flex gap-2"><dt class="w-12 shrink-0 text-gray-500">Baru</dt><dd id="replace-new" class="font-mono text-gray-900 dark:text-gray-100 break-all"></dd></div>
+                    </dl>
+                    <p id="replace-hint" class="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-200"></p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeReplaceModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors">
+                    Batal
+                </button>
+                <button type="button" id="btn-confirm-replace" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm hover:brightness-110 transition-all" style="background-color: #006b32; color: #ffffff !important;">
+                    <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
+                    <span>Ya, Ganti</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL CONFIRMATION POPUP FOR DELETE -->
     <div id="delete-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs hidden opacity-0 transition-opacity duration-200">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700 transform transition-all scale-95 duration-200" id="modal-card">
@@ -367,6 +414,12 @@
         document.addEventListener('DOMContentLoaded', function() {
             let activeProjectId = null;
             let targetFileToDelete = null;
+
+            // Peta file yang sudah ada per project (dari server, diperbarui di
+            // sisi klien setelah upload/hapus) -> dasar dialog "Ganti file?".
+            const existingFiles = JSON.parse(document.getElementById('existing-files').textContent || '{}');
+            let resetMode = false;          // true setelah tombol Atur Ulang ditekan
+            let pendingReplace = null;      // {stepObj, nextStepObj} menunggu konfirmasi ganti
             
             // Steps elements: Step 1 (WTT), Step 2 (PPRP), Step 3 (GHP)
             const step1 = {
@@ -436,7 +489,7 @@
                         if (this.files.length === 1) {
                             text.textContent = this.files[0].name;
                         } else {
-                            text.textContent = this.files.length + ' files selected';
+                            text.textContent = this.files.length + ' file dipilih: ' + Array.from(this.files).map(f => f.name).join(', ');
                         }
                         display.classList.remove('hidden');
                         dropZone.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/10');
@@ -472,6 +525,54 @@
                 }
             }
             
+            function escapeHtml(s) {
+                return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+            }
+
+            // Susun hasil per file dari core.ingest (diproses / dilewati / gagal
+            // + peringatan) supaya tidak ada file yang "hilang" tanpa laporan.
+            function formatIngestResult(result) {
+                const iconFor = {
+                    processed: ['check_circle', 'text-green-600 dark:text-green-400'],
+                    skipped: ['remove_circle', 'text-gray-400'],
+                    failed: ['cancel', 'text-red-600 dark:text-red-400']
+                };
+                let html = `<p class="font-semibold">${escapeHtml(result.message || '')}</p>`;
+                if (result.files && result.files.length) {
+                    html += '<ul class="mt-1.5 space-y-1">';
+                    for (const f of result.files) {
+                        const [icon, color] = iconFor[f.status] || iconFor.failed;
+                        html += `<li class="flex items-start gap-1.5 text-xs"><span class="material-symbols-outlined text-[15px] mt-px ${color}">${icon}</span><span><span class="font-mono">${escapeHtml(f.filename)}</span> — ${escapeHtml(f.message)}</span></li>`;
+                        for (const w of (f.warnings || [])) {
+                            html += `<li class="ml-5 text-xs text-amber-700 dark:text-amber-300">⚠ ${escapeHtml(w)}</li>`;
+                        }
+                    }
+                    html += '</ul>';
+                }
+                if (result.resync && result.resync.length) {
+                    html += `<p class="mt-1.5 text-xs opacity-80">${result.resync.map(escapeHtml).join('<br>')}</p>`;
+                }
+                if (result.warnings && result.warnings.length) {
+                    html += `<div class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-200"><p class="font-semibold mb-1">Perlu diperiksa:</p><ul class="list-disc ml-4 space-y-0.5">${result.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`;
+                }
+                return html;
+            }
+
+            // Seperti showNotification, tapi menerima HTML yang sudah di-escape.
+            function showResult(stepObj, type, html) {
+                const notif = stepObj.resultNotif;
+                const ok = type === 'success';
+                notif.classList.remove('hidden');
+                notif.innerHTML = `
+                    <div class="flex items-start gap-2 p-3 rounded-lg ${ok ? 'bg-green-50 border border-green-200 dark:bg-green-900/20 dark:border-green-800/50' : 'bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800/50'}">
+                        <span class="material-symbols-outlined ${ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} text-[18px] mt-0.5">${ok ? 'check_circle' : 'error'}</span>
+                        <div class="text-sm ${ok ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'} flex-1 min-w-0">${html}</div>
+                        <button type="button" onclick="this.closest('.result-notification').classList.add('hidden')" class="${ok ? 'text-green-400 hover:text-green-600' : 'text-red-400 hover:text-red-600'}">
+                            <span class="material-symbols-outlined text-[16px]">close</span>
+                        </button>
+                    </div>`;
+            }
+
             // Show/update progress bar
             function showProgress(stepObj, phase) {
                 const area = stepObj.progressArea;
@@ -502,20 +603,41 @@
                 }, 2000);
             }
             
+            function stepFileType(stepObj) {
+                const el = stepObj.form.querySelector('[name="file_type"]');
+                return el ? el.value : '';
+            }
+
+            // Pintu masuk submit: bila bulan ini sudah punya file WTT/GHP, minta
+            // konfirmasi "ganti?" dulu; kalau tidak, langsung upload.
+            function uploadForm(stepObj, nextStepObj) {
+                const type = stepFileType(stepObj);
+                const existing = activeProjectId ? (existingFiles[String(activeProjectId)] || {}) : {};
+                const oldName = (type === 'WTT' || type === 'GHP') ? existing[type] : null;
+                if (oldName) {
+                    openReplaceModal(stepObj, nextStepObj, type, oldName);
+                    return;
+                }
+                doUpload(stepObj, nextStepObj, false);
+            }
+
             // AJAX Upload function with Auto-Disable
-            async function uploadForm(stepObj, nextStepObj) {
+            async function doUpload(stepObj, nextStepObj, replace) {
                 const form = stepObj.form;
                 const btn = stepObj.btn;
                 const originalBtnHtml = btn.innerHTML;
-                
+
                 // Show uploading progress
                 btn.disabled = true;
                 btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span> <span class="btn-text">Processing...</span>';
                 showProgress(stepObj, 'uploading');
-                
+
                 const formData = new FormData(form);
                 if (activeProjectId) {
                     formData.append('project_id', activeProjectId);
+                }
+                if (replace) {
+                    formData.append('replace', '1');
                 }
                 
                 try {
@@ -548,10 +670,9 @@
                             periodBadgeContainer.classList.remove('hidden');
                         }
                         
-                        // Build contextual success notification
-                        const count = result.processed_count || 0;
-                        const detail = result.detail || 'records processed';
-                        showNotification(stepObj, 'success', `Berhasil! ${count} ${detail}.`);
+                        // Hasil per file (termasuk yang dilewati/gagal + peringatan)
+                        showResult(stepObj, 'success', formatIngestResult(result));
+                        rememberUploadedFiles(result);
                         
                         // AUTO-DISABLE THIS STEP CARD
                         btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check_circle</span> <span class="btn-text">Completed</span>';
@@ -576,7 +697,11 @@
                         // Error
                         showProgress(stepObj, 'error');
                         hideProgress(stepObj);
-                        showNotification(stepObj, 'error', result.message || "Terjadi kesalahan saat upload.");
+                        if (result && result.files) {
+                            showResult(stepObj, 'error', formatIngestResult(result));
+                        } else {
+                            showNotification(stepObj, 'error', (result && result.message) || "Terjadi kesalahan saat upload.");
+                        }
                         btn.innerHTML = originalBtnHtml;
                         btn.disabled = false;
                     }
@@ -667,7 +792,7 @@
                 if (fileType === 'WTT') {
                     modalCascadeHint.textContent = 'Semua jadwal penerbangan baseline dan revisi PPRP terkait akan dihapus dari database.';
                 } else if (fileType === 'PPRP') {
-                    modalCascadeHint.textContent = 'Semua jadwal versi perubahan PPRP ini akan dihapus dari database (jadwal WTT tetap aman).';
+                    modalCascadeHint.textContent = 'Semua jadwal versi perubahan PPRP ini dihapus; jadwal WTT pada tanggal-tanggal itu dihidupkan kembali dan GHP dicocokkan ulang.';
                 } else if (fileType === 'GHP') {
                     modalCascadeHint.textContent = 'Status realisasi terbang (OPERATED) pada jadwal project ini akan di-reset kembali ke UNVERIFIED.';
                 }
@@ -690,6 +815,102 @@
                 }, 200);
             };
             
+            // ---- Atur Ulang: buka semua kartu untuk bulan yang dipilih ----
+            const resetSelect = document.getElementById('reset-project-select');
+            const btnResetMode = document.getElementById('btn-reset-mode');
+
+            resetSelect.addEventListener('change', function() {
+                btnResetMode.disabled = !this.value;
+            });
+
+            btnResetMode.addEventListener('click', function() {
+                const opt = resetSelect.options[resetSelect.selectedIndex];
+                if (!opt || !opt.value) return;
+
+                resetMode = true;
+                activeProjectId = opt.value;
+                document.getElementById('pprp-project-id').value = activeProjectId;
+                document.getElementById('ghp-project-id').value = activeProjectId;
+
+                periodStatusText.innerHTML = `Mode Atur Ulang: <strong>${escapeHtml(opt.dataset.code)}</strong> (${escapeHtml(opt.dataset.period)}) — semua kartu terbuka. Belum ada data yang berubah; upload file untuk mengganti yang lama.`;
+                detectedPeriodText.textContent = opt.dataset.period;
+                periodBadgeContainer.classList.remove('hidden');
+                overallSuccess.classList.add('hidden');
+
+                resetStep(step1, 1, 'WTT', 'bg-blue-600', 'Upload WTT');
+                resetStep(step2, 2, 'PPRP', 'bg-purple-600', 'Upload PPRP');
+                resetStep(step3, 3, 'GHP', 'bg-orange-600', 'Upload GHP');
+                unlockStep(step1);
+                unlockStep(step2);
+                unlockStep(step3);
+            });
+
+            // ---- Dialog "Ganti file?" ----
+            const replaceModal = document.getElementById('replace-modal');
+            const replaceModalCard = document.getElementById('replace-modal-card');
+            const btnConfirmReplace = document.getElementById('btn-confirm-replace');
+
+            function openReplaceModal(stepObj, nextStepObj, type, oldName) {
+                pendingReplace = { stepObj, nextStepObj };
+                const newName = stepObj.input.files && stepObj.input.files[0] ? stepObj.input.files[0].name : '';
+                const sameFile = newName === oldName;
+                document.getElementById('replace-title').textContent = sameFile
+                    ? `Bangun ulang ${type} ${detectedPeriodText.textContent}?`
+                    : `Ganti file ${type} ${detectedPeriodText.textContent}?`;
+                document.getElementById('replace-old').textContent = oldName;
+                document.getElementById('replace-new').textContent = sameFile ? `${newName} (file yang sama)` : newName;
+                document.getElementById('replace-hint').textContent = type === 'GHP'
+                    ? 'File GHP lama dihapus, lalu status beroperasi dihitung ulang dari file baru. Data WTT dan PPRP tidak terpengaruh.'
+                    : 'File WTT lama dan seluruh jadwal turunannya dihapus, lalu bulan ini disusun ulang: WTT baru → surat PPRP diterapkan ulang → GHP dicocokkan ulang. File PPRP dan GHP yang sudah ada tetap dipakai.';
+                btnConfirmReplace.querySelector('span:last-child').textContent = sameFile ? 'Ya, Bangun Ulang' : 'Ya, Ganti';
+                replaceModal.classList.remove('hidden');
+                setTimeout(() => {
+                    replaceModal.classList.remove('opacity-0');
+                    replaceModalCard.classList.remove('scale-95');
+                    replaceModalCard.classList.add('scale-100');
+                }, 10);
+            }
+
+            window.closeReplaceModal = function() {
+                pendingReplace = null;
+                replaceModal.classList.add('opacity-0');
+                replaceModalCard.classList.remove('scale-100');
+                replaceModalCard.classList.add('scale-95');
+                setTimeout(() => replaceModal.classList.add('hidden'), 200);
+            };
+
+            btnConfirmReplace.addEventListener('click', function() {
+                if (!pendingReplace) return;
+                const { stepObj, nextStepObj } = pendingReplace;
+                closeReplaceModal();
+                doUpload(stepObj, nextStepObj, true);
+            });
+
+            // Perbarui peta file setelah upload sukses (dipakai dialog ganti berikutnya).
+            function rememberUploadedFiles(result) {
+                if (!result || !result.project_id) return;
+                const key = String(result.project_id);
+                const entry = existingFiles[key] || (existingFiles[key] = { WTT: null, GHP: null, PPRP: [] });
+                for (const f of (result.files || [])) {
+                    if (f.status !== 'processed') continue;
+                    if (result.file_type === 'PPRP') {
+                        entry.PPRP.push(f.filename);
+                    } else {
+                        entry[result.file_type] = f.filename;
+                    }
+                }
+            }
+
+            function forgetDeletedFile(projectId, type, name) {
+                const entry = existingFiles[String(projectId)];
+                if (!entry) return;
+                if (type === 'PPRP') {
+                    entry.PPRP = entry.PPRP.filter(n => n !== name);
+                } else if (entry[type] === name) {
+                    entry[type] = null;
+                }
+            }
+
             // Modal Confirm Delete Action
             btnConfirmDelete.addEventListener('click', async function() {
                 if (!targetFileToDelete) return;
@@ -719,6 +940,7 @@
                         if (row) {
                             row.remove();
                         }
+                        forgetDeletedFile(result.project_id, result.deleted_file_type, targetFileToDelete.name);
                         
                         // 2. REACTIVE STEP UNLOCK
                         if (result.deleted_file_type === 'WTT') {
