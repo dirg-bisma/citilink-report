@@ -246,6 +246,9 @@ class ReportCellsTests(TestCase):
         data = get_project_report_data(self.maret.id)
         qg719 = [r for r in data['rows'] if r['flight_number'] == 'QG-719']
         self.assertEqual(len(qg719), 1)
+        # Kebalikannya: ada di WTT tapi tidak di template & tanpa surat (QG715,
+        # musim sebelumnya) -> tidak masuk laporan musim ini, seperti di Excel.
+        self.assertNotIn('QG-715', [r['flight_number'] for r in data['rows']])
         self.assertEqual(qg719[0]['days'][27]['val'], CELL_OUTSIDE)   # 28 Mar
         self.assertEqual(qg719[0]['days'][29]['val'], str(self.expect_ghp('QG719', D(2026, 3, 30))))
 

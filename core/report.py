@@ -1349,11 +1349,16 @@ def get_project_report_data(project_id: int) -> dict:
     grand_operated = 0
     row_seq = 1
 
-    # Flight = gabungan template resmi dan DB: flight berizin yang absen di PDF
-    # WTT (mis. QG719 Maret) tetap tampil dengan realisasi dari GHP.
+    # Keanggotaan laporan musim (sama dengan Excel): flight ada di template
+    # resmi ATAU dibawa surat PPRP. Flight berizin yang absen di PDF WTT
+    # (QG719 Maret) tetap tampil; flight yang hanya ada di WTT tanpa izin
+    # musim ini (QG715 Maret = musim sebelumnya, konfirmasi pengguna
+    # 2026-09-03) tidak ikut.
     for fn in sorted(set(flight_data) | set(tpl_meta)):
         fd = flight_data.get(fn)
         base_meta = tpl_meta.get(fn, {})
+        if not base_meta and not (fd and fd['pprp_list']):
+            continue
         route_str = base_meta.get('route') or (f"SUB-{fd['destination']}" if fd else '')
         # Tampilkan dalam bentuk template/Excel ('QG-179'), bukan bentuk DB ('QG179')
         flight_str = ('QG-' + fn[2:]) if fn.startswith('QG') else (fd['flight_str'] if fd else fn)
