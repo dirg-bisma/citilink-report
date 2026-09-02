@@ -24,8 +24,31 @@ def detect_ghp_period(excel_path: str) -> int:
     raise ValueError("Tidak dapat mendeteksi bulan pada file GHP Excel.")
 
 
-def parse_ghp(excel_path: str) -> List[Dict]:
-    """Extract normalized operational records from GHP Excel"""
+def detect_ghp_range(excel_path: str):
+    """
+    Rentang tanggal yang DICAKUP file GHP, dari judul laporannya:
+    'SUB - Ground Handling Punctuality (01/08/2026 - 25/08/2026 - Detail)'
+    -> (date(2026,8,1), date(2026,8,25)). Dipakai laporan untuk membedakan
+    'tidak terbang' (0) dari 'belum ada datanya' (sel kosong): tanggal di
+    luar rentang ini tidak boleh dibaca sebagai realisasi apa pun.
+    None bila judul tidak memuat rentang.
+    """
+    from datetime import datetime
+    df = pd.read_excel(excel_path, header=None, nrows=3)
+    for idx in range(min(3, len(df))):
+        for val in df.iloc[idx].tolist():
+            if pd.isna(val):
+                continue
+            m = re.search(r'(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})', str(val))
+            if m:
+                return (datetime.strptime(m.group(1), '%d/%m/%Y').date(),
+                        datetime.strptime(m.group(2), '%d/%m/%Y').date())
+    return None
+
+
+def parse_ghp(excel_path: str, year: int = 2026) -> List[Dict]:
+    """Extract normalized operational records from GHP Excel.
+    year: tahun untuk kolom tanggal DD/MM (file GHP tidak memuat tahun)."""
     df = pd.read_excel(excel_path, header=None)
     
     records = []
@@ -64,11 +87,10 @@ def parse_ghp(excel_path: str) -> List[Dict]:
                 'dest': routes[i+1]
             })
         
-        # Parse date: "01/04" -> assume year from filename
+        # Parse date: "01/04" -> tahun dari parameter (file hanya memuat DD/MM)
         date_parts = str(date_str).split('/')
         if len(date_parts) == 2:
             day, month = date_parts
-            year = '2026'  # ponytail: from filename, parse later if needed
             flight_date = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         else:
             continue

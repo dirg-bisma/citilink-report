@@ -271,6 +271,12 @@
             background-color: #fafafa;
         }
 
+        /* Sel kosong = belum ada data GHP untuk tanggal itu (bukan 0, bukan '-') */
+        .cell-nodata {
+            background-color: #ffffff;
+            background-image: repeating-linear-gradient(45deg, transparent 0 3px, #f3f4f6 3px 4px);
+        }
+
         .col-total-realisasi {
             font-weight: 700;
             background-color: #f0fdf4;
@@ -473,15 +479,16 @@
                         <td style="font-size: 10px;">{{ row.month_label }}</td>
                         
                         <!-- 31 Tanggal -->
+                        {# Empat keadaan sel, sama persis dengan Excel (core.report.resolve_daily_cell) #}
                         {% for d in row.days %}
-                            {% if d.is_scheduled %}
-                                {% if d.is_operated %}
+                            {% if d.val == '1' %}
                                 <td class="cell-operated" title="Tgl {{ d.day }}: Beroperasi (Ops)">1</td>
-                                {% else %}
-                                <td class="cell-unoperated" title="Tgl {{ d.day }}: Tidak Operasi (No Ops)">0</td>
-                                {% endif %}
+                            {% elif d.val == '0' %}
+                                <td class="cell-unoperated" title="Tgl {{ d.day }}: Direncanakan, tidak terbang (No Ops)">0</td>
+                            {% elif d.val == '-' %}
+                                <td class="cell-empty" title="Tgl {{ d.day }}: Diluar jadwal penerbangan">-</td>
                             {% else %}
-                            <td class="cell-empty" title="Tgl {{ d.day }}: Diluar Jadwal">-</td>
+                                <td class="cell-nodata" title="Tgl {{ d.day }}: Belum ada data GHP untuk tanggal ini"></td>
                             {% endif %}
                         {% endfor %}
 
@@ -519,6 +526,7 @@
                     <p><strong style="color: #6b7280; font-family: 'JetBrains Mono', monospace;">-</strong> &nbsp;= &nbsp;Diluar jadwal penerbangan</p>
                     <p><strong style="color: #ef4444; font-family: 'JetBrains Mono', monospace;">0</strong> &nbsp;= &nbsp;Tidak Operasi / No Ops</p>
                     <p><strong style="color: #15803d; font-family: 'JetBrains Mono', monospace;">1</strong> &nbsp;= &nbsp;Beroperasi / Ops</p>
+                    <p><strong style="color: #9ca3af; font-family: 'JetBrains Mono', monospace;">&nbsp;&nbsp;</strong> &nbsp;= &nbsp;kosong: belum ada data GHP untuk tanggal tersebut</p>
                 </div>
 
                 <!-- TANDA TANGAN -->

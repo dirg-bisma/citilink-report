@@ -10,9 +10,19 @@ Algoritma:
 3. Temukan semua "blok flight" dari kolom B (flight number QG-xxx).
 4. Untuk setiap flight yang ada di DB:
    a. Jika ada data PPRP -> duplikasi blok ke bawah, isi kolom Periode & Surat baru.
-   b. Isi kolom absensi harian (1/0) per bulan dari data GHP (operational_flag).
-5. Rebuild nomor urut (kolom A) dan perbaiki rumus SUM di kolom Total Realisasi.
-6. Simpan sebagai file baru, kembalikan path-nya.
+5. Isi sel harian SETIAP blok (SEMULA maupun tiap segmen MENJADI) dengan aturan
+   yang dikonfirmasi pengguna (2026-09-03), dievaluasi berurutan per tanggal:
+     1) di luar kolom PERIODE blok itu ................ '-'  (diluar jadwal)
+     2) hari itu tidak ada di kolom DAY OF FLIGHT ..... '-'
+     3) tanggal di luar cakupan file GHP yang ada ..... kosong (belum ada data)
+     4) GHP mencatat flight terbang ................... 1
+     5) sisanya (direncanakan, tidak terbang) ......... 0
+   Sumber 1-2 adalah DOKUMEN (template resmi / surat PPRP), bukan ada-tidaknya
+   baris jadwal di DB, supaya "belum diupload" tidak pernah tercetak sebagai
+   "tidak direncanakan". Sumber 4-5 dibaca langsung dari file GHP, sehingga
+   flight berizin yang absen di PDF WTT (kasus QG719 Maret) tetap tercatat 1.
+6. Rebuild nomor urut (kolom A); rumus SUM di kolom Total mengabaikan '-' & sel kosong.
+7. Simpan sebagai file baru, kembalikan path-nya.
 """
 
 import re
@@ -26,8 +36,9 @@ from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.formula.translate import Translator
 
-from core.models import Project, ScheduleVersion
-from core.services import _utc_time_to_local, _utc_offset_for_airport
+from core.models import Project, ScheduleVersion, SourceFile
+from core.parsers.ghp import parse_ghp, detect_ghp_range
+from core.services import _utc_time_to_local, _utc_offset_for_airport, is_charter_flight
 
 
 # ---------------------------------------------------------------------------
@@ -50,12 +61,159 @@ def _normalize_flight(s):
     return str(s).replace('-', '').replace(' ', '').upper().strip()
 
 
-def _pprp_letter_end_date(pdf_path, flight_norm, start_date, cache):
+# ---------------------------------------------------------------------------
+# Aturan sel harian (1 / 0 / '-' / kosong)
+# ---------------------------------------------------------------------------
+
+_MONTHS_ID_ABBR = {
+    'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MEI': 5, 'MAY': 5, 'JUN': 6,
+    'JUL': 7, 'AGU': 8, 'AGT': 8, 'AUG': 8, 'SEP': 9, 'OKT': 10, 'OCT': 10,
+    'NOV': 11, 'DES': 12, 'DEC': 12,
+}
+CELL_OUTSIDE = '-'   # karakter legenda "Diluar jadwal penerbangan" di template
+
+
+def _parse_date_id(text):
+    """'29 MAR 2026' / '24OKT2026' -> date; None bila tidak terbaca."""
+    m = re.search(r'(\d{1,2})\s*([A-Z]{3})\s*(\d{4})', str(text or '').upper())
+    if not m or m.group(2) not in _MONTHS_ID_ABBR:
+        return None
+    try:
+        return datetime.date(int(m.group(3)), _MONTHS_ID_ABBR[m.group(2)], int(m.group(1)))
+    except ValueError:
+        return None
+
+
+def _parse_periode_range(text):
+    """Kolom PERIODE '29 MAR 2026/24 OKT 2026' -> (date, date); None bila tidak lengkap."""
+    if not text or '/' not in str(text):
+        return None
+    parts = str(text).split('/', 1)
+    start, end = _parse_date_id(parts[0]), _parse_date_id(parts[1])
+    if start and end and start <= end:
+        return (start, end)
+    return None
+
+
+def _parse_day_of_flight(val):
     """
-    Ambil tanggal akhir berlaku sebuah segmen PPRP dari PDF surat aslinya
-    (tidak tersimpan di DB, hanya ada di file sumber). Segmen dicocokkan
-    berdasarkan flight number + tanggal mulai berlaku; fallback ke match
-    flight number saja. cache: dict per-run agar satu PDF hanya diparse sekali.
+    Kolom DAY OF FLIGHT -> frozenset hari ISO (1=Senin..7=Minggu).
+    Dua notasi yang beredar:
+      - posisional 7 karakter, 0/'-' = tidak terbang: '1004507' -> {1,4,5,7};
+        Excel kerap membuang nol di depan ('0204060' tersimpan 204060), jadi
+        angka dipad kembali ke 7 digit;
+      - ringkas tanpa nol: '246' -> {2,4,6} (pola hari di surat PPRP).
+    None bila kosong/tidak terbaca -> dianggap tiap hari.
+    """
+    if val is None:
+        return None
+    if isinstance(val, float) and val.is_integer():
+        val = int(val)
+    s = str(val).strip()
+    if not s:
+        return None
+    if '0' in s or '-' in s or len(s) == 7:
+        s = s.zfill(7)
+        if len(s) != 7:
+            return None
+        days = {i + 1 for i, ch in enumerate(s) if ch not in ('0', '-')}
+    elif s.isdigit() and all(ch in '1234567' for ch in s):
+        days = {int(ch) for ch in s}
+    else:
+        return None
+    return frozenset(days) if days else None
+
+
+def _format_day_of_flight(days):
+    """Kebalikan _parse_day_of_flight, dalam notasi posisional template: {2,4,6} -> '0204060'."""
+    if not days:
+        return '1234567'
+    return ''.join(str(d) if d in days else '0' for d in range(1, 8))
+
+
+def _month_row_period(cell_val, default_year):
+    """Sel 'Bulan-Tahun' (datetime, atau teks 'Mei-26' / 'Sep-26') -> (tahun, bulan)."""
+    if cell_val is None:
+        return None
+    if isinstance(cell_val, (datetime.datetime, datetime.date)):
+        return (cell_val.year, cell_val.month)
+    s = str(cell_val).strip()
+    low = s.lower()
+    month = None
+    for num, name in INDONESIAN_MONTHS.items():
+        if low.startswith(name.lower()[:3]) or low.startswith(MONTH_ABBR[num].lower()):
+            month = num
+            break
+    if not month:
+        return None
+    year = default_year
+    m = re.search(r'(\d{2,4})\s*$', s)
+    if m:
+        y = int(m.group(1))
+        year = y + 2000 if y < 100 else y
+    return (year, month)
+
+
+def resolve_daily_cell(day, periode, days_of_week, ghp_actual, flight_norm):
+    """
+    Nilai satu sel harian untuk satu blok laporan, sesuai urutan aturan yang
+    dikonfirmasi pengguna (lihat docstring modul):
+      '-'   di luar periode blok / bukan hari operasi
+      None  (sel kosong) tanggal tidak dicakup file GHP mana pun
+      1 / 0 GHP mencatat terbang / tidak
+    periode: (start, end) atau None (tak dibatasi); days_of_week: frozenset
+    ISO weekday atau None (tiap hari); ghp_actual: hasil _load_ghp_actual.
+    """
+    if periode and not (periode[0] <= day <= periode[1]):
+        return CELL_OUTSIDE
+    if days_of_week is not None and day.isoweekday() not in days_of_week:
+        return CELL_OUTSIDE
+    if not any(start <= day <= end for start, end in ghp_actual['coverage']):
+        return None
+    return 1 if (flight_norm, day) in ghp_actual['flown'] else 0
+
+
+def _load_ghp_actual(projects):
+    """
+    Baca realisasi langsung dari file-file GHP project yang diberikan:
+      flown    : {(flight_norm, date)} keberangkatan SUB (charter diabaikan)
+      coverage : [(start, end)] rentang tanggal yang dicakup tiap file (dari
+                 judul laporan GHP), penentu sel kosong vs 0.
+    Sengaja tidak memakai operational_flag di ScheduleVersion: flag itu hanya
+    ada untuk flight yang punya baris jadwal, sedangkan laporan juga harus
+    mencatat flight berizin (ada di template) yang absen di PDF WTT.
+    """
+    flown, coverage = set(), []
+    for project in projects:
+        files = SourceFile.objects.filter(project=project, file_type='GHP', status='SUCCESS').order_by('uploaded_at', 'id')
+        for sf in files:
+            if not sf.file_path or not os.path.exists(sf.file_path):
+                continue
+            rng = detect_ghp_range(sf.file_path)
+            dates = set()
+            for rec in parse_ghp(sf.file_path, year=project.year):
+                if rec.get('origin') != 'SUB' or is_charter_flight(rec['flight_number']):
+                    continue
+                try:
+                    d = datetime.date.fromisoformat(rec['flight_date'])
+                except ValueError:
+                    continue
+                flown.add((_normalize_flight(rec['flight_number']), d))
+                dates.add(d)
+            if rng:
+                coverage.append(rng)
+            elif dates:
+                coverage.append((min(dates), max(dates)))
+    return {'flown': flown, 'coverage': coverage}
+
+
+def _pprp_letter_flight(pdf_path, flight_norm, start_date, cache):
+    """
+    Ambil entri flight sebuah segmen PPRP dari PDF surat aslinya (tanggal
+    akhir berlaku & pola hari tidak tersimpan di DB, hanya ada di file
+    sumber). Segmen dicocokkan berdasarkan flight number + tanggal mulai
+    berlaku; fallback ke match flight number saja. cache: dict per-run agar
+    satu PDF hanya diparse sekali.
     """
     if not pdf_path or not os.path.exists(pdf_path):
         return None
@@ -73,43 +231,55 @@ def _pprp_letter_end_date(pdf_path, flight_norm, start_date, cache):
         if _normalize_flight(f['flight_number']) != flight_norm:
             continue
         if start_date and f.get('pprp_date') == start_date:
-            return f.get('end_date')
+            return f
         if fallback is None:
-            fallback = f.get('end_date')
+            fallback = f
     return fallback
 
 
-def _assign_pprp_periods(fn, fd, pdf_cache):
+def _pprp_letter_end_date(pdf_path, flight_norm, start_date, cache):
+    f = _pprp_letter_flight(pdf_path, flight_norm, start_date, cache)
+    return f.get('end_date') if f else None
+
+
+def _assign_pprp_periods(fn, fd, pdf_cache, template_start=None):
     """
     Urutkan pprp_list kronologis lalu isi string periode tiap entri:
-    - periode_semula hanya pada entri PERTAMA (baseline WTT dipotong sampai
-      sehari sebelum PPRP pertama berlaku).
+    - periode_semula hanya pada entri PERTAMA (baseline dipotong sampai sehari
+      sebelum PPRP pertama berlaku). Awal baseline = tanggal mulai di kolom
+      PERIODE template (izin musim resmi, mis. 29 MAR); fallback ke tanggal
+      WTT pertama di DB hanya bila template tidak memuat flight itu.
     - periode entri non-terakhir berakhir sehari sebelum entri berikutnya mulai.
     - periode entri TERAKHIR berakhir pada tanggal akhir berlaku di surat PPRP
       (diparse dari PDF); fallback ke tanggal WTT terakhir bila PDF tak terbaca.
+    Sekaligus isi pprp['days'] (pola hari segmen) dari surat; fallback ke hari
+    yang muncul di baris jadwalnya.
     """
     wtt_start = fd.get('wtt_start_date')
     wtt_end = fd.get('wtt_end_date')
+    semula_start = template_start or wtt_start
     fd['pprp_list'].sort(key=lambda p: p.get('pprp_date') or datetime.date.max)
     plist = fd['pprp_list']
     for i, pprp in enumerate(plist):
         d_pprp = pprp.get('pprp_date')
         pprp['periode_semula'] = ''
         pprp['periode'] = ''
+        letter = _pprp_letter_flight(pprp.get('source_pprp_path'), fn, d_pprp, pdf_cache)
+        pprp['days'] = _parse_day_of_flight(letter.get('day_pattern')) if letter else None
+        if pprp['days'] is None and pprp.get('dates'):
+            pprp['days'] = frozenset(dt.isoweekday() for dt in pprp['dates'])
         if not d_pprp:
             continue
-        if i == 0 and wtt_start:
+        if i == 0 and semula_start:
             semula_end = d_pprp - datetime.timedelta(days=1)
             pprp['periode_semula'] = (
-                f"{wtt_start.day} {MONTH_ABBR[wtt_start.month]} {wtt_start.year}"
+                f"{semula_start.day} {MONTH_ABBR[semula_start.month]} {semula_start.year}"
                 f"/{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
             )
         if i + 1 < len(plist) and plist[i + 1].get('pprp_date'):
             seg_end = plist[i + 1]['pprp_date'] - datetime.timedelta(days=1)
         else:
-            seg_end = _pprp_letter_end_date(
-                pprp.get('source_pprp_path'), fn, d_pprp, pdf_cache
-            ) or wtt_end
+            seg_end = (letter.get('end_date') if letter else None) or wtt_end
         if seg_end:
             pprp['periode'] = (
                 f"{d_pprp.day} {MONTH_ABBR[d_pprp.month]} {d_pprp.year}"
@@ -257,12 +427,15 @@ def _build_flight_data(schedules):
     return flight_data
 
 
-def _finalize_flight_data(flight_data):
+def _finalize_flight_data(flight_data, tpl_meta=None):
     """Hitung periode & jam final tiap segmen PPRP. Kembalikan cache parse PDF
-    (dipakai lagi oleh pemanggil untuk membaca tipe permohonan surat)."""
+    (dipakai lagi oleh pemanggil untuk membaca tipe permohonan surat).
+    tpl_meta: metadata template (load_template_flight_metadata) — sumber awal
+    periode baseline tiap flight."""
     pdf_cache = {}
+    tpl_meta = tpl_meta or {}
     for fn, fd in flight_data.items():
-        _assign_pprp_periods(fn, fd, pdf_cache)
+        _assign_pprp_periods(fn, fd, pdf_cache, template_start=tpl_meta.get(fn, {}).get('start_date'))
         for pprp in fd['pprp_list']:
             _resolve_menjadi_times(fd, pprp)
     return pdf_cache
@@ -599,8 +772,12 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
     ).order_by('flight_number', 'version_number', 'flight_date')
 
     # --- Bangun struktur data per-flight + hitung periode/jam tiap segmen ---
+    tpl_meta = load_template_flight_metadata(template_path)
     flight_data = _build_flight_data(schedules)
-    _finalize_flight_data(flight_data)
+    _finalize_flight_data(flight_data, tpl_meta)
+    # Realisasi dibaca langsung dari file GHP project ini; bulan lain di
+    # template tidak dicakup -> sel kosong (bukan 0).
+    ghp_actual = _load_ghp_actual([project])
 
     # --- Buka template Excel ---
     wb = load_workbook(template_path)
@@ -701,6 +878,9 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
             # Update Tipe Pengajuan MENJADI
             if cols.get('tipe'):
                 ws.cell(top_row, cols['tipe']).value = 'Perubahan'
+            # Pola hari segmen (dari surat) — dibaca lagi saat mengisi sel harian
+            if cols.get('hari'):
+                ws.cell(top_row, cols['hari']).value = _format_day_of_flight(pprp.get('days'))
             # Jam baris MENJADI: ETD = STD GHP dikonversi UTC (kosong bila GHP
             # belum ada), ETA = STA surat PPRP (UTC), ATD/ATA = jam WTT (Local).
             # Selalu ditulis (termasuk None) agar nilai warisan salinan blok
@@ -726,47 +906,9 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
     # --- Refresh headers setelah insert ---
     headers = _find_flight_headers(ws, col_flight)
 
-    # --- Isi data harian (1/0) per blok per bulan ---
-    for i, (row_start, flight_norm, flight_str) in enumerate(headers):
-        fd = flight_data.get(flight_norm)
-        if not fd or not fd['daily']:
-            continue
-
-        next_row = headers[i + 1][0] if i + 1 < len(headers) else None
-        row_end = _block_end(ws, row_start, next_row, ws.max_row)
-
-        day_start_col = cols.get('day_start')
-        bulan_tahun_col = cols.get('bulan_tahun', 13)
-        if not day_start_col:
-            continue
-
-        # Iterasi setiap baris di dalam blok flight ini
-        for r in range(row_start, row_end + 1):
-            bln_val = ws.cell(r, bulan_tahun_col).value
-            if not bln_val:
-                continue
-                
-            m_num = None
-            if isinstance(bln_val, (datetime.datetime, datetime.date)):
-                m_num = bln_val.month
-            else:
-                bln_str = str(bln_val).strip().lower()
-                for num, name in INDONESIAN_MONTHS.items():
-                    if name.lower()[:3] in bln_str or MONTH_ABBR[num].lower() in bln_str:
-                        m_num = num
-                        break
-            
-            if not m_num:
-                continue
-                
-            # Isi dari tanggal 1 sampai akhir bulan
-            days_in_month = calendar.monthrange(year, m_num)[1]
-            for day in range(1, days_in_month + 1):
-                day_col = day_start_col + (day - 1)
-                flag = fd['daily'].get((year, m_num, day), 0)
-                cell = ws.cell(r, day_col)
-                if type(cell).__name__ != 'MergedCell':
-                    cell.value = flag
+    # --- Isi sel harian tiap blok (SEMULA & tiap segmen) dari PERIODE +
+    #     DAY OF FLIGHT blok itu dan realisasi GHP ---
+    _fill_daily_cells(ws, cols, headers, ghp_actual, year)
 
     # --- Rebuild nomor urut (kolom A) ---
     seq = 1
@@ -833,6 +975,8 @@ def _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, pprp_e
             ws.cell(top_row, cols['surat']).value = pprp['pprp_letter']
         if cols.get('tipe'):
             ws.cell(top_row, cols['tipe']).value = 'Perubahan'
+        if cols.get('hari'):
+            ws.cell(top_row, cols['hari']).value = _format_day_of_flight(pprp.get('days'))
         # Jam baris MENJADI: ETD = STD GHP dikonversi UTC (kosong bila GHP belum
         # ada), ETA = STA surat PPRP (UTC), ATD/ATA = jam WTT (Local). Selalu
         # ditulis agar nilai warisan salinan blok induk tidak tertinggal.
@@ -857,6 +1001,52 @@ def _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, pprp_e
     return row_end
 
 
+def _top_cell_value(ws, row, col):
+    """Nilai sel (row, col); bila sel itu bagian merged range, baca sel kiri-atasnya."""
+    if not col:
+        return None
+    cell = ws.cell(row, col)
+    if type(cell).__name__ == 'MergedCell':
+        for rng in ws.merged_cells.ranges:
+            if rng.min_row <= row <= rng.max_row and rng.min_col <= col <= rng.max_col:
+                return ws.cell(rng.min_row, rng.min_col).value
+        return None
+    return cell.value
+
+
+def _fill_daily_cells(ws, cols, headers, ghp_actual, default_year):
+    """
+    Isi sel harian SEMUA blok laporan (SEMULA maupun tiap segmen MENJADI) —
+    juga blok template yang tidak punya baris jadwal di DB, karena flight
+    berizin bisa saja absen di PDF WTT (QG719 Maret).
+
+    Batas '-' dibaca dari kolom PERIODE dan DAY OF FLIGHT di baris atas blok
+    itu sendiri, sehingga grid tidak pernah bertentangan dengan yang tercetak.
+    Setelah sisip sub-blok, _find_flight_headers memberi satu header per blok.
+    """
+    day_start_col = cols.get('day_start')
+    bulan_tahun_col = cols.get('bulan_tahun', 13)
+    if not day_start_col:
+        return
+    for i, (row_start, flight_norm, flight_str) in enumerate(headers):
+        next_row = headers[i + 1][0] if i + 1 < len(headers) else None
+        row_end = _block_end(ws, row_start, next_row, ws.max_row)
+        periode = _parse_periode_range(_top_cell_value(ws, row_start, cols.get('periode')))
+        days_of_week = _parse_day_of_flight(_top_cell_value(ws, row_start, cols.get('hari')))
+
+        for r in range(row_start, row_end + 1):
+            ym = _month_row_period(ws.cell(r, bulan_tahun_col).value, default_year)
+            if not ym:
+                continue
+            y, m = ym
+            for day in range(1, calendar.monthrange(y, m)[1] + 1):
+                cell = ws.cell(r, day_start_col + (day - 1))
+                if type(cell).__name__ == 'MergedCell':
+                    continue
+                cell.value = resolve_daily_cell(
+                    datetime.date(y, m, day), periode, days_of_week, ghp_actual, flight_norm)
+
+
 def generate_rekap_report(output_path: str) -> int:
     """
     Menghasilkan laporan rekapitulasi satu musim penuh dengan menggabungkan 
@@ -877,8 +1067,10 @@ def generate_rekap_report(output_path: str) -> int:
 
     schedules = ScheduleVersion.objects.all().order_by('flight_number', 'version_number', 'flight_date')
 
+    tpl_meta = load_template_flight_metadata(template_path)
     flight_data = _build_flight_data(schedules)
-    pdf_cache = _finalize_flight_data(flight_data)
+    pdf_cache = _finalize_flight_data(flight_data, tpl_meta)
+    ghp_actual = _load_ghp_actual(Project.objects.all())
 
     wb = load_workbook(template_path)
     ws = wb.active
@@ -988,6 +1180,8 @@ def generate_rekap_report(output_path: str) -> int:
                 ws.cell(top_row, cols['surat']).value = first_pprp['pprp_letter']
             if cols.get('tipe'):
                 ws.cell(top_row, cols['tipe']).value = submission_type
+            if cols.get('hari'):
+                ws.cell(top_row, cols['hari']).value = _format_day_of_flight(first_pprp.get('days'))
 
             block_end = insert_at + tmpl_len - 1
 
@@ -1004,45 +1198,7 @@ def generate_rekap_report(output_path: str) -> int:
 
         headers = _find_flight_headers(ws, col_flight)
 
-    latest_year = latest_project.year
-    for i, (row_start, flight_norm, flight_str) in enumerate(headers):
-        fd = flight_data.get(flight_norm)
-        if not fd or not fd['daily']:
-            continue
-
-        next_row = headers[i + 1][0] if i + 1 < len(headers) else None
-        row_end = _block_end(ws, row_start, next_row, ws.max_row)
-
-        day_start_col = cols.get('day_start')
-        bulan_tahun_col = cols.get('bulan_tahun', 13)
-        if not day_start_col:
-            continue
-
-        for r in range(row_start, row_end + 1):
-            bln_val = ws.cell(r, bulan_tahun_col).value
-            if not bln_val:
-                continue
-                
-            m_num = None
-            if isinstance(bln_val, (datetime.datetime, datetime.date)):
-                m_num = bln_val.month
-            else:
-                bln_str = str(bln_val).strip().lower()
-                for num, name in INDONESIAN_MONTHS.items():
-                    if name.lower()[:3] in bln_str or MONTH_ABBR[num].lower() in bln_str:
-                        m_num = num
-                        break
-            
-            if not m_num:
-                continue
-                
-            days_in_month = calendar.monthrange(latest_year, m_num)[1]
-            for day in range(1, days_in_month + 1):
-                day_col = day_start_col + (day - 1)
-                flag = fd['daily'].get((latest_year, m_num, day), 0)
-                cell = ws.cell(r, day_col)
-                if type(cell).__name__ != 'MergedCell':
-                    cell.value = flag
+    _fill_daily_cells(ws, cols, headers, ghp_actual, latest_project.year)
 
     seq = 1
     for row_start, flight_norm, flight_str in _find_flight_headers(ws, col_flight):
@@ -1100,6 +1256,7 @@ def load_template_flight_metadata(template_path: str = None) -> dict:
                 periode = ws.cell(r, 8).value
                 surat = ws.cell(r, 9).value
                 tipe = ws.cell(r, 10).value
+                hari = ws.cell(r, 11).value   # Day Of Flight, notasi posisional ('1004507')
 
                 def _fmt_t(v):
                     if isinstance(v, (datetime.time, datetime.datetime)):
@@ -1121,6 +1278,7 @@ def load_template_flight_metadata(template_path: str = None) -> dict:
                     'tipe': str(tipe).strip() if tipe else 'Perpanjangan',
                     'start_date': start_d,
                     'end_date': end_d,
+                    'days': _parse_day_of_flight(hari),
                 }
         return meta
     except Exception:
@@ -1149,75 +1307,85 @@ def get_project_report_data(project_id: int) -> dict:
     ).order_by('flight_number', 'version_number', 'flight_date')
 
     flight_data = _build_flight_data(schedules)
-    pdf_cache = _finalize_flight_data(flight_data)
+    pdf_cache = _finalize_flight_data(flight_data, tpl_meta)
+    ghp_actual = _load_ghp_actual([project])
 
     periode_label = f"Summer {str(year)[-2:]} (S-{str(year)[-2:]})" if month in range(3, 11) else f"Winter {str(year)[-2:]} (W-{str(year)[-2:]})"
     month_label = f"{INDONESIAN_MONTHS.get(month, '')[:3]}-{str(year)[-2:]}"
 
-    def _make_days_row(day_flags):
-        """day_flags: {nomor_hari: operated_bool} -> grid 31 sel tanggal."""
-        out = []
+    def _make_days_row(flight_norm, periode_str, days_of_week):
+        """
+        Grid 31 sel tanggal bulan project ini dengan aturan sel yang sama
+        persis dengan Excel (resolve_daily_cell). Kembalikan (sel, planned,
+        operated); planned hanya menghitung tanggal yang hasilnya diketahui
+        (1/0), supaya tanggal tanpa data GHP tidak menekan persentase.
+        """
+        periode = _parse_periode_range(periode_str)
+        out, planned, operated = [], 0, 0
         for day in range(1, 32):
-            if day in day_flags:
-                operated = day_flags[day]
-                out.append({'day': day, 'is_scheduled': True,
-                            'is_operated': operated, 'val': '1' if operated else '0'})
+            try:
+                d = datetime.date(year, month, day)
+            except ValueError:
+                out.append({'day': day, 'is_scheduled': False, 'is_operated': False, 'val': ''})
+                continue
+            v = resolve_daily_cell(d, periode, days_of_week, ghp_actual, flight_norm)
+            if v == CELL_OUTSIDE:
+                out.append({'day': day, 'is_scheduled': False, 'is_operated': False, 'val': CELL_OUTSIDE})
+            elif v is None:
+                out.append({'day': day, 'is_scheduled': True, 'is_operated': False, 'val': ''})
             else:
-                out.append({'day': day, 'is_scheduled': False,
-                            'is_operated': False, 'val': '-'})
-        return out
-
-    def _day_pattern(dates):
-        weekdays = {dt.isoweekday() for dt in dates}
-        return "".join(str(d) if d in weekdays else "-" for d in range(1, 8))
+                planned += 1
+                operated += v
+                out.append({'day': day, 'is_scheduled': True, 'is_operated': bool(v), 'val': str(v)})
+        return out, planned, operated
 
     rows = []
     grand_planned = 0
     grand_operated = 0
     row_seq = 1
 
-    for fn in sorted(flight_data.keys()):
-        fd = flight_data[fn]
+    # Flight = gabungan template resmi dan DB: flight berizin yang absen di PDF
+    # WTT (mis. QG719 Maret) tetap tampil dengan realisasi dari GHP.
+    for fn in sorted(set(flight_data) | set(tpl_meta)):
+        fd = flight_data.get(fn)
         base_meta = tpl_meta.get(fn, {})
-        route_str = base_meta.get('route') or f"SUB-{fd['destination']}"
-        plist = fd['pprp_list']  # sudah kronologis (diurutkan _assign_pprp_periods)
-        first_pprp_date = plist[0].get('pprp_date') if plist else None
+        route_str = base_meta.get('route') or (f"SUB-{fd['destination']}" if fd else '')
+        # Tampilkan dalam bentuk template/Excel ('QG-179'), bukan bentuk DB ('QG179')
+        flight_str = ('QG-' + fn[2:]) if fn.startswith('QG') else (fd['flight_str'] if fd else fn)
+        origin = (fd['origin'] if fd else None) or 'SUB'
+        plist = fd['pprp_list'] if fd else []  # sudah kronologis (diurutkan _assign_pprp_periods)
 
-        # --- Baris SEMULA: hanya bila flight punya baseline WTT ---
-        if fd.get('wtt'):
-            if first_pprp_date:
-                semula_dates = [dt for dt in fd['v1_times'] if dt < first_pprp_date]
-            else:
-                semula_dates = list(fd['v1_times'])
-            day_flags = {dt.day: fd['daily'].get((dt.year, dt.month, dt.day)) == 1
-                         for dt in semula_dates}
-
+        # --- Baris SEMULA: bila flight ada di template resmi atau punya baseline WTT ---
+        if base_meta or (fd and fd.get('wtt')):
             if plist and plist[0].get('periode_semula'):
                 periode = plist[0]['periode_semula']
             else:
                 periode = base_meta.get('periode') or f"29 MAR {year}/24 OKT {year}"
+            days_of_week = base_meta.get('days')
+            if days_of_week is None and fd and fd.get('v1_times'):
+                days_of_week = frozenset(dt.isoweekday() for dt in fd['v1_times'])
 
-            total_planned = len(semula_dates)
-            total_operated = sum(1 for v in day_flags.values() if v)
+            day_cells, total_planned, total_operated = _make_days_row(fn, periode, days_of_week)
             grand_planned += total_planned
             grand_operated += total_operated
 
+            wtt = (fd or {}).get('wtt') or {}
             rows.append({
                 'no': row_seq,
-                'flight_number': fd['flight_str'],
-                'origin': fd['origin'] or 'SUB',
+                'flight_number': flight_str,
+                'origin': origin,
                 'to': route_str,
                 'etd': base_meta.get('etd') or '',
                 'eta': base_meta.get('eta') or '',
-                'atd': fd['wtt'].get('atd') or '',
-                'ata': fd['wtt'].get('ata') or '',
+                'atd': wtt.get('atd') or '',
+                'ata': wtt.get('ata') or '',
                 'periode': periode,
                 'pprp_no': base_meta.get('surat') or '-',
-                'pprp_type': 'Perpanjangan',
-                'day_pattern': _day_pattern(semula_dates),
+                'pprp_type': base_meta.get('tipe') or 'Perpanjangan',
+                'day_pattern': _format_day_of_flight(days_of_week),
                 'total_planned': total_planned,
                 'month_label': month_label,
-                'days': _make_days_row(day_flags),
+                'days': day_cells,
                 'total_operated': total_operated,
                 'pct': round((total_operated / total_planned * 100) if total_planned else 0, 1),
             })
@@ -1225,31 +1393,28 @@ def get_project_report_data(project_id: int) -> dict:
 
         # --- Satu baris Perubahan per segmen PPRP ---
         for i, pprp in enumerate(plist):
-            seg_dates = sorted(pprp['dates'])
-            day_flags = {dt.day: pprp['dates'][dt] for dt in seg_dates}
-
-            default_type = 'Perubahan' if (fd.get('wtt') or i > 0) else 'Penambahan'
-            total_planned = len(seg_dates)
-            total_operated = sum(1 for v in day_flags.values() if v)
+            default_type = 'Perubahan' if (fd.get('wtt') or base_meta or i > 0) else 'Penambahan'
+            periode = pprp.get('periode') or 'PERLU REVIEW - SURAT TIDAK TERBACA'
+            day_cells, total_planned, total_operated = _make_days_row(fn, periode, pprp.get('days'))
             grand_planned += total_planned
             grand_operated += total_operated
 
             rows.append({
                 'no': row_seq,
-                'flight_number': fd['flight_str'],
-                'origin': fd['origin'] or 'SUB',
+                'flight_number': flight_str,
+                'origin': origin,
                 'to': route_str,
                 'etd': pprp.get('etd_utc') or '',
                 'eta': pprp.get('sta') or '',
                 'atd': pprp.get('atd') or '',
                 'ata': pprp.get('ata') or '',
-                'periode': pprp.get('periode') or 'PERLU REVIEW - SURAT TIDAK TERBACA',
+                'periode': periode,
                 'pprp_no': pprp.get('pprp_letter') or '-',
                 'pprp_type': _submission_type_for(pprp, pdf_cache, default_type),
-                'day_pattern': _day_pattern(seg_dates),
+                'day_pattern': _format_day_of_flight(pprp.get('days')),
                 'total_planned': total_planned,
                 'month_label': month_label,
-                'days': _make_days_row(day_flags),
+                'days': day_cells,
                 'total_operated': total_operated,
                 'pct': round((total_operated / total_planned * 100) if total_planned else 0, 1),
             })
