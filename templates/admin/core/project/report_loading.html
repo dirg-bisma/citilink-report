@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menyusun Laporan - {{ project.project_id }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f3f4f6;
+            color: #111827;
+            line-height: 1.4;
+        }
+
+        .top-navbar {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .badge-project {
+            background: #e6f4ea;
+            color: #006b32;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #a3d9b8;
+        }
+
+        .stage {
+            display: flex;
+            justify-content: center;
+            padding: 72px 24px 48px;
+        }
+
+        .card { width: 100%; max-width: 430px; }
+
+        .card-title {
+            text-align: center;
+            font-size: 17px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        #stageLabel {
+            text-align: center;
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 6px;
+            min-height: 19px;
+        }
+
+        .track {
+            position: relative;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 999px;
+            margin: 40px 0 14px;
+        }
+
+        #fill {
+            height: 100%;
+            width: 0;
+            background: #006b32;
+            border-radius: 999px;
+            transition: width .6s cubic-bezier(.4, 0, .2, 1);
+        }
+
+        #plane {
+            position: absolute;
+            top: -31px;
+            left: 0;
+            transform: translateX(-50%);
+            color: #006b32;
+            font-size: 23px;
+            transition: left .6s cubic-bezier(.4, 0, .2, 1);
+        }
+
+        .meta-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .dots { display: flex; gap: 6px; align-items: center; }
+
+        .dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #d1d5db;
+            transition: background .3s;
+        }
+
+        .dot.on { background: #006b32; }
+
+        .pct {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 700;
+            color: #006b32;
+        }
+
+        .skeleton {
+            margin-top: 34px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            animation: pulse 1.8s ease-in-out infinite;
+        }
+
+        .sk-line { height: 9px; background: #e6e8ec; border-radius: 4px; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+        .hint {
+            text-align: center;
+            font-size: 11.5px;
+            color: #9ca3af;
+            margin-top: 18px;
+        }
+
+        /* Kondisi gagal */
+        .error-box { text-align: center; }
+
+        .error-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #b91c1c;
+            margin-bottom: 6px;
+        }
+
+        .error-msg {
+            font-size: 12.5px;
+            color: #6b7280;
+            margin-bottom: 18px;
+            word-break: break-word;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            padding: 8px 14px;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn-primary { background: #006b32; color: #ffffff; }
+        .btn-primary:hover { background: #005226; }
+        .btn-ghost { background: #ffffff; border-color: #d1d5db; color: #374151; }
+        .btn-ghost:hover { background: #f9fafb; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="top-navbar">
+        <span class="material-symbols-outlined" style="color: #006b32; font-size: 26px;">flight_takeoff</span>
+        <div>
+            <div style="font-size: 15px; letter-spacing: 0.08em;"><span style="font-weight: 800; color: #006b32;">CITILINK</span> <span style="font-weight: 800; color: #111827;">AVIOR</span></div>
+            <div style="font-size: 10.5px; color: #6b7280;">AViation Operations Report</div>
+        </div>
+        <span class="badge-project">{{ project.project_id }} ({{ month_name }} {{ project.year }})</span>
+    </div>
+
+    <div class="stage">
+        <div class="card">
+            <div id="loadingView">
+                <p class="card-title">Menyusun laporan realisasi</p>
+                <p id="stageLabel">Menghubungkan ke basis data&hellip;</p>
+
+                <div class="track">
+                    <div id="fill"></div>
+                    <span id="plane" class="material-symbols-outlined">flight_takeoff</span>
+                </div>
+
+                <div class="meta-row">
+                    <div class="dots">
+                        <span class="dot on" data-step="0"></span>
+                        <span class="dot" data-step="1"></span>
+                        <span class="dot" data-step="2"></span>
+                        <span class="dot" data-step="3"></span>
+                    </div>
+                    <div class="pct"><span id="pct">0</span>%</div>
+                </div>
+
+                <div class="skeleton">
+                    <div class="sk-line" style="width: 100%"></div>
+                    <div class="sk-line" style="width: 88%"></div>
+                    <div class="sk-line" style="width: 94%"></div>
+                    <div class="sk-line" style="width: 70%"></div>
+                </div>
+
+                <p class="hint">Laporan besar butuh beberapa detik. Jangan tutup tab ini.</p>
+            </div>
+
+            <div id="errorView" class="error-box hidden">
+                <span class="material-symbols-outlined" style="font-size: 40px; color: #b91c1c;">error</span>
+                <p class="error-title">Laporan gagal dimuat</p>
+                <p class="error-msg" id="errorMsg"></p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button type="button" class="btn btn-primary" id="retryBtn">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">refresh</span> Coba lagi
+                    </button>
+                    <a class="btn btn-ghost" href="?data=1">Buka langsung</a>
+                </div>
+            </div>
+
+            <noscript>
+                <p class="hint" style="margin-top: 24px;">
+                    JavaScript nonaktif. <a href="?data=1" style="color: #006b32;">Buka laporan secara langsung</a>.
+                </p>
+            </noscript>
+        </div>
+    </div>
+
+<script>
+(function () {
+    var fill = document.getElementById('fill'),
+        plane = document.getElementById('plane'),
+        pctEl = document.getElementById('pct'),
+        label = document.getElementById('stageLabel'),
+        dots = document.querySelectorAll('.dot'),
+        shown = 0,        // persen yang sedang ditampilkan
+        creep = null,
+        timers = [];
+
+    // Tahapan mengikuti urutan kerja nyata di server. Django tidak melaporkan
+    // kemajuan per tahap, jadi bilah maju berbasis waktu lalu menunggu di 95%
+    // sampai data benar-benar tiba — tidak pernah mengklaim 100% lebih awal.
+    var STAGES = [
+        { at: 250,  pct: 18, text: 'Membaca jadwal penerbangan…' },
+        { at: 2000, pct: 46, text: 'Mencocokkan realisasi harian dari GHP…' },
+        { at: 5000, pct: 72, text: 'Menghitung periode & surat PPRP…' },
+        { at: 9000, pct: 88, text: 'Menyusun tabel laporan…' }
+    ];
+
+    function paint(pct, text, step) {
+        shown = pct;
+        fill.style.width = pct + '%';
+        plane.style.left = pct + '%';
+        pctEl.textContent = Math.round(pct);
+        if (text) { label.textContent = text; }
+        if (step !== undefined) {
+            dots.forEach(function (d, i) { d.classList.toggle('on', i <= step); });
+        }
+    }
+
+    function start() {
+        document.getElementById('errorView').classList.add('hidden');
+        document.getElementById('loadingView').classList.remove('hidden');
+        timers.forEach(clearTimeout);
+        timers = [];
+        if (creep) { clearInterval(creep); }
+        paint(0, 'Menghubungkan ke basis data…', 0);
+
+        STAGES.forEach(function (s, i) {
+            timers.push(setTimeout(function () { paint(s.pct, s.text, i); }, s.at));
+        });
+        // Merayap pelan menuju 95% bila server lebih lama dari perkiraan
+        timers.push(setTimeout(function () {
+            creep = setInterval(function () {
+                if (shown < 95) { paint(shown + 0.4); }
+            }, 700);
+        }, 9600));
+
+        fetchReport();
+    }
+
+    function fetchReport() {
+        fetch('?data=1', { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (res) {
+                if (res.redirected) { window.location.href = res.url; return null; }
+                if (!res.ok) { throw new Error('Server merespons ' + res.status + ' ' + res.statusText); }
+                return res.text();
+            })
+            .then(function (html) {
+                if (html === null || html === undefined) { return; }
+                if (creep) { clearInterval(creep); }
+                timers.forEach(clearTimeout);
+                paint(100, 'Selesai — menampilkan laporan', 3);
+                setTimeout(function () {
+                    document.open();
+                    document.write(html);
+                    document.close();
+                }, 380);
+            })
+            .catch(function (err) {
+                if (creep) { clearInterval(creep); }
+                timers.forEach(clearTimeout);
+                document.getElementById('loadingView').classList.add('hidden');
+                document.getElementById('errorMsg').textContent = err.message || 'Tidak dapat menghubungi server.';
+                document.getElementById('errorView').classList.remove('hidden');
+            });
+    }
+
+    document.getElementById('retryBtn').addEventListener('click', start);
+    start();
+})();
+</script>
+
+</body>
+</html>

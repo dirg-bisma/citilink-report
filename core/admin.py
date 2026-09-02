@@ -32,7 +32,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.http import JsonResponse
 from django.core.files.storage import FileSystemStorage
-from core.report import get_project_report_data, generate_report, generate_rekap_report
+from core.report import get_project_report_data, generate_report, generate_rekap_report, INDONESIAN_MONTHS
 
 
 @admin.register(Project)
@@ -75,6 +75,18 @@ class ProjectAdmin(ModelAdmin):
         
     def view_report_view(self, request, project_id):
         project = Project.objects.get(id=project_id)
+
+        # Dua tahap: penyusunan laporan makan beberapa detik, sedangkan tombol
+        # View membuka tab baru — tanpa ini tab tsb kosong selama proses.
+        # Tahap 1 mengirim layar progres (tanpa query berat); layar itu menarik
+        # laporan aslinya lewat ?data=1 lalu menggantikan isi halaman.
+        if request.GET.get('data') != '1':
+            return render(request, 'admin/core/project/report_loading.html', {
+                'project': project,
+                'month_name': INDONESIAN_MONTHS.get(project.month, ''),
+                'title': f"Menyusun Laporan {project.project_id}",
+            })
+
         report_data = get_project_report_data(project.id)
         context = {
             'project': project,
