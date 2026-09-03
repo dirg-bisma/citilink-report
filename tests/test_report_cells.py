@@ -91,6 +91,22 @@ class DailyCellRuleTests(SimpleTestCase):
     def test_ghp_range_from_header(self):
         self.assertEqual(detect_ghp_range(GHP_MARET), (D(2026, 3, 1), D(2026, 3, 31)))
 
+    def test_block_month_rows_repairs_a_mislabelled_row_by_position(self):
+        """Template resmi: blok QG-672 baris pertamanya berlabel Okt-26 (salah ketik) — dibaca sebagai Maret."""
+        from openpyxl import Workbook
+        from core.report import _block_month_rows
+        ws = Workbook().active
+        labels = [datetime.datetime(2026, 10, 1), datetime.datetime(2026, 4, 4), 'Mei-26'] + \
+                 [datetime.datetime(2026, m, 1) for m in (6, 7, 8, 9, 10)]
+        for i, v in enumerate(labels, start=5):
+            ws.cell(i, 13).value = v
+        self.assertEqual([m for _, (_, m) in _block_month_rows(ws, 5, 12, 2026)], [3, 4, 5, 6, 7, 8, 9, 10])
+        # Blok yang labelnya benar atau tidak lengkap (QG-179: Apr..Sep) dibiarkan apa adanya
+        ws2 = Workbook().active
+        for i, m in enumerate((4, 5, 6, 7, 8, 9), start=5):
+            ws2.cell(i, 13).value = datetime.datetime(2026, m, 1)
+        self.assertEqual([m for _, (_, m) in _block_month_rows(ws2, 5, 10, 2026)], [4, 5, 6, 7, 8, 9])
+
 
 def upload(path):
     with open(path, 'rb') as fh:
@@ -242,6 +258,81 @@ class ReportCellsTests(TestCase):
         self.assertNotIn('QG-9177', [r['flight_number'] for r in data['rows']])
         self.assertNotIn('QG9177', [r['flight_number'] for r in data['rows']])
 
+    # --- ketiga keluaran harus memuat data yang sama (kepentingan audit Otban) ---
+
+    def test_monthly_excel_equals_preview_in_every_column(self):
+        path = os.path.join(self.out_dir, 'bulanan_juli_cmp.xlsx')
+        generate_report(self.juli.id, TEMPLATE, path)
+        excel = _blocks_from_excel(path, 7)
+        preview = _blocks_from_preview(self.juli.id)
+
+        self.assertEqual(set(excel), set(preview), 'daftar blok (flight, urutan) harus sama')
+        self.assertEqual(excel[('QG948', 0)]['tipe'], 'Perpanjangan')
+        self.assertEqual(excel[('QG948', 1)]['surat'], preview[('QG948', 1)]['surat'])
+        for key in excel:
+            for field in ('etd', 'eta', 'atd', 'ata', 'periode', 'surat', 'tipe', 'hari', 'days'):
+                self.assertEqual(excel[key][field], preview[key][field], f'{key} kolom {field}')
+
+    def test_monthly_excel_is_a_slice_of_the_rekap(self):
+        path = os.path.join(self.out_dir, 'bulanan_juli_slice.xlsx')
+        generate_report(self.juli.id, TEMPLATE, path)
+        monthly = _blocks_from_excel(path, 7)
+        rekap = _blocks_from_excel(self.rekap_path, 7)
+
+        self.assertEqual(set(monthly), set(rekap))
+        for key in monthly:
+            for field in ('etd', 'eta', 'atd', 'ata', 'periode', 'surat', 'tipe', 'hari', 'days'):
+                self.assertEqual(monthly[key][field], rekap[key][field], f'{key} kolom {field}')
+
+    def test_template_submission_type_is_preserved(self):
+        """Template menulis 'Perubahan' untuk QG-179; laporan tidak boleh menimpanya."""
+        self.assertEqual(self.rekap.tipe('QG179', 0), 'Perubahan')
+        self.assertEqual(self.rekap.tipe('QG430', 0), 'Perpanjangan')
+
+    def test_day_of_flight_written_with_seven_characters(self):
+        self.assertEqual(self.rekap.raw_day_of_flight('QG179', 0), '0204060')
+        self.assertEqual(self.rekap.raw_day_of_flight('QG723', 0), '1004507')
+
+    def test_blank_template_row_falls_back_to_wtt_without_inventing_a_letter(self):
+        """Musim baru: template bisa hanya berisi nomor flight & rute. Periode dan
+        Day Of Flight diambil dari WTT dan ditulis ke Excel; surat dibiarkan kosong."""
+        blank_tpl = os.path.join(self.out_dir, 'template_kosong.xlsx')
+        wb = load_workbook(TEMPLATE)
+        ws = wb.active
+        for r in range(8, ws.max_row + 1):
+            if str(ws.cell(r, 2).value).strip() == 'QG-430':
+                for col in (4, 5, 6, 7, 8, 9, 10, 11):
+                    ws.cell(r, col).value = None
+                break
+        wb.save(blank_tpl)
+
+        path = os.path.join(self.out_dir, 'bulanan_juli_blank.xlsx')
+        generate_report(self.juli.id, blank_tpl, path)
+        sheet = _Sheet(path)
+        self.assertEqual(sheet.periode('QG430', 0), '1 MAR 2026/31 JUL 2026')   # rentang WTT yang dimuat
+        self.assertEqual(sheet.raw_day_of_flight('QG430', 0), '1234567')
+        self.assertIn(str(self.ws_cell(path, 'QG430', 9)), ('None', ''))         # surat tidak dikarang
+        for day in (1, 10, 31):
+            self.assertEqual(sheet.cell('QG430', 0, 7, day), self.expect_ghp('QG430', D(2026, 7, day)))
+        # 1 Maret ada di rentang WTT (bukan '-'), tapi GHP project Juli tidak
+        # mencakupnya -> kosong, bukan 0 dan bukan '-'.
+        self.assertIsNone(sheet.cell('QG430', 0, 3, 1))
+
+        self.juli.template_path = blank_tpl
+        self.juli.save()
+        row = next(r for r in get_project_report_data(self.juli.id)['rows'] if r['flight_number'] == 'QG-430')
+        self.assertEqual(row['periode'], '1 MAR 2026/31 JUL 2026')
+        self.assertEqual(row['day_pattern'], '1234567')
+        self.assertEqual(row['pprp_no'], '-')
+
+    @staticmethod
+    def ws_cell(path, flight, col):
+        ws = load_workbook(path).active
+        for r in range(8, ws.max_row + 1):
+            if str(ws.cell(r, 2).value).replace('-', '').strip() == flight:
+                return ws.cell(r, col).value
+        return None
+
     def test_preview_lists_permitted_flight_absent_from_wtt(self):
         data = get_project_report_data(self.maret.id)
         qg719 = [r for r in data['rows'] if r['flight_number'] == 'QG-719']
@@ -289,3 +380,65 @@ class _Sheet:
 
     def total_formula(self, flight, block):
         return self.ws.cell(self._month_row(flight, block, 7), self.cols['total']).value
+
+    def tipe(self, flight, block):
+        return str(self.ws.cell(self._top(flight, block), self.cols['tipe']).value).strip()
+
+    def raw_day_of_flight(self, flight, block):
+        return str(self.ws.cell(self._top(flight, block), self.cols['hari']).value)
+
+
+def _norm_time(v):
+    if v is None:
+        return ''
+    if isinstance(v, (datetime.time, datetime.datetime)):
+        return v.strftime('%H:%M')
+    return str(v).strip()
+
+
+def _blocks_from_excel(path, month):
+    """{(flight, urutan blok): kolom-kolom + 31 sel bulan `month`} dari file Excel.
+    Blok tanpa baris bulan itu (mis. QG-179 tidak punya baris Maret) -> 31 x '-'."""
+    from collections import Counter
+    from core.report import _detect_columns, _normalize_flight
+    ws = load_workbook(path).active
+    cols, _ = _detect_columns(ws)
+    headers = _find_flight_headers(ws, cols['flight'])
+    out, seen = {}, Counter()
+    for i, (top, norm, _) in enumerate(headers):
+        nxt = headers[i + 1][0] if i + 1 < len(headers) else ws.max_row + 1
+        mrow = next((r for r in range(top, nxt)
+                     if (_month_row_period(ws.cell(r, 13).value, 2026) or (0, 0))[1] == month), None)
+        if mrow:
+            days = ['' if v is None else str(v) for v in
+                    (ws.cell(mrow, cols['day_start'] + d).value for d in range(31))]
+        else:
+            days = [CELL_OUTSIDE] * 31
+        out[(norm, seen[norm])] = {
+            'etd': _norm_time(ws.cell(top, cols['etd']).value), 'eta': _norm_time(ws.cell(top, cols['eta']).value),
+            'atd': _norm_time(ws.cell(top, cols['atd']).value), 'ata': _norm_time(ws.cell(top, cols['ata']).value),
+            'periode': _norm_time(ws.cell(top, cols['periode']).value),
+            'surat': _norm_time(ws.cell(top, cols['surat']).value) or '-',
+            'tipe': _norm_time(ws.cell(top, cols['tipe']).value),
+            'hari': _norm_time(ws.cell(top, cols['hari']).value),
+            'days': days,
+        }
+        seen[norm] += 1
+    return out
+
+
+def _blocks_from_preview(project_id):
+    from collections import Counter
+    from core.report import _normalize_flight
+    out, seen = {}, Counter()
+    for r in get_project_report_data(project_id)['rows']:
+        norm = _normalize_flight(r['flight_number'])
+        out[(norm, seen[norm])] = {
+            'etd': _norm_time(r['etd']), 'eta': _norm_time(r['eta']),
+            'atd': _norm_time(r['atd']), 'ata': _norm_time(r['ata']),
+            'periode': _norm_time(r['periode']), 'surat': _norm_time(r['pprp_no']) or '-',
+            'tipe': _norm_time(r['pprp_type']), 'hari': _norm_time(r['day_pattern']),
+            'days': [c['val'] for c in r['days']],
+        }
+        seen[norm] += 1
+    return out

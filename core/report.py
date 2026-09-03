@@ -771,15 +771,17 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
                 "Pastikan file form_realisasi_winter26.xlsx ada di dalam folder static/tpl/."
             )
 
-    # --- Ambil semua schedule versions untuk project ini ---
-    schedules = ScheduleVersion.objects.filter(
-        project_id=project_id,
-    ).order_by('flight_number', 'version_number', 'flight_date')
+    # --- Ambil schedule versions SEMUA project ---
+    # Laporan bulanan = irisan rekap musim untuk bulan ini. Surat PPRP yang
+    # diupload ke bulan lain tetap berlaku di bulan ini (mis. surat Juni untuk
+    # QG171 masih berlaku di Agustus), jadi segmen & jam harus dihitung dari
+    # seluruh musim; hanya cakupan GHP yang dibatasi ke project ini.
+    schedules = ScheduleVersion.objects.all().order_by('flight_number', 'version_number', 'flight_date')
 
     # --- Bangun struktur data per-flight + hitung periode/jam tiap segmen ---
     tpl_meta = load_template_flight_metadata(template_path)
     flight_data = _build_flight_data(schedules)
-    _finalize_flight_data(flight_data, tpl_meta)
+    pdf_cache = _finalize_flight_data(flight_data, tpl_meta)
     # Realisasi dibaca langsung dari file GHP project ini; bulan lain di
     # template tidak dicakup -> sel kosong (bukan 0).
     ghp_actual = _load_ghp_actual([project])
@@ -816,17 +818,9 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
             if cols.get('ata') and fd['wtt'].get('ata'):
                 ws.cell(row_start, cols['ata']).value = fd['wtt']['ata']
 
-        # Update SEMULA block: pastikan Tipe Pengajuan diset ke 'Perpanjangan'
-        if cols.get('tipe'):
-            target_row = row_start
-            for rng in ws.merged_cells.ranges:
-                if (rng.min_col <= cols['tipe'] <= rng.max_col and
-                        rng.min_row <= row_start <= rng.max_row):
-                    target_row = rng.min_row
-                    break
-            cell = ws.cell(target_row, cols['tipe'])
-            if type(cell).__name__ != 'MergedCell':
-                cell.value = 'Perpanjangan'
+        # Tipe Pengajuan blok SEMULA dibiarkan sesuai template resmi (dulu
+        # ditimpa 'Perpanjangan', padahal template menulis 'Perubahan' untuk
+        # flight yang baseline-nya sendiri hasil surat, mis. QG177/QG179).
 
         # Jika tidak ada PPRP, skip proses duplikasi blok
         if not fd['pprp_list']:
@@ -908,12 +902,12 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
 
             row_end = insert_at + block_len - 1  # Update row_end
 
-    # --- Refresh headers setelah insert ---
-    headers = _find_flight_headers(ws, col_flight)
+    # --- Flight baru dari surat PPRP (tidak ada di template), sama seperti rekap ---
+    headers = _append_new_flight_blocks(ws, cols, month_col_map, flight_data, pdf_cache, year)
 
     # --- Isi sel harian tiap blok (SEMULA & tiap segmen) dari PERIODE +
     #     DAY OF FLIGHT blok itu dan realisasi GHP ---
-    _fill_daily_cells(ws, cols, headers, ghp_actual, year)
+    _fill_daily_cells(ws, cols, headers, ghp_actual, year, _wtt_fallbacks(flight_data))
 
     # --- Rebuild nomor urut (kolom A) ---
     seq = 1
@@ -1019,7 +1013,55 @@ def _top_cell_value(ws, row, col):
     return cell.value
 
 
-def _fill_daily_cells(ws, cols, headers, ghp_actual, default_year):
+SEASON_MONTHS = list(range(3, 11))   # blok template musim panas: Mar..Okt, 8 baris
+
+
+def _block_month_rows(ws, row_start, row_end, default_year, bulan_tahun_col=13):
+    """
+    [(baris, (tahun, bulan))] untuk baris-baris bulan sebuah blok.
+
+    Label di kolom Bulan-Tahun dipakai apa adanya, KECUALI bloknya punya tepat
+    8 baris bulan yang hampir semuanya sudah berurutan Mar..Okt — maka bulan
+    ditentukan dari POSISI baris. Template resmi (diisi sebelum sistem ada,
+    dan sengaja tidak diubah) punya blok QG-672 yang baris pertamanya salah
+    ketik 'Okt-26' padahal itu baris Maret; kode yang mengalah, bukan dokumen.
+    """
+    labelled = []
+    for r in range(row_start, row_end + 1):
+        ym = _month_row_period(ws.cell(r, bulan_tahun_col).value, default_year)
+        if ym:
+            labelled.append((r, ym))
+    if len(labelled) == len(SEASON_MONTHS):
+        months = [ym[1] for _, ym in labelled]
+        if months != SEASON_MONTHS and sum(a == b for a, b in zip(months, SEASON_MONTHS)) >= len(SEASON_MONTHS) - 1:
+            year = labelled[0][1][0]
+            return [(r, (year, m)) for (r, _), m in zip(labelled, SEASON_MONTHS)]
+    return labelled
+
+
+def _fmt_periode(start, end):
+    return (f"{start.day} {MONTH_ABBR[start.month]} {start.year}"
+            f"/{end.day} {MONTH_ABBR[end.month]} {end.year}")
+
+
+def _wtt_fallbacks(flight_data):
+    """
+    Periode & pola hari cadangan per flight dari data WTT, dipakai bila kolom
+    PERIODE / DAY OF FLIGHT di template kosong (template musim baru bisa hanya
+    berisi nomor flight & rute). Nomor surat sengaja TIDAK ditebak.
+    """
+    out = {}
+    for fn, fd in flight_data.items():
+        periode = None
+        if fd.get('wtt_start_date') and fd.get('wtt_end_date'):
+            periode = (fd['wtt_start_date'], fd['wtt_end_date'])
+        days = frozenset(dt.isoweekday() for dt in fd.get('v1_times') or {}) or None
+        if periode or days:
+            out[fn] = {'periode': periode, 'days': days}
+    return out
+
+
+def _fill_daily_cells(ws, cols, headers, ghp_actual, default_year, fallbacks=None):
     """
     Isi sel harian SEMUA blok laporan (SEMULA maupun tiap segmen MENJADI) —
     juga blok template yang tidak punya baris jadwal di DB, karena flight
@@ -1027,23 +1069,42 @@ def _fill_daily_cells(ws, cols, headers, ghp_actual, default_year):
 
     Batas '-' dibaca dari kolom PERIODE dan DAY OF FLIGHT di baris atas blok
     itu sendiri, sehingga grid tidak pernah bertentangan dengan yang tercetak.
+    Bila kolom itu kosong (template musim baru), nilai cadangan dari WTT
+    (fallbacks, lihat _wtt_fallbacks) dipakai DAN ditulis ke selnya.
     Setelah sisip sub-blok, _find_flight_headers memberi satu header per blok.
     """
     day_start_col = cols.get('day_start')
     bulan_tahun_col = cols.get('bulan_tahun', 13)
     if not day_start_col:
         return
+    fallbacks = fallbacks or {}
+
+    def _write_top(col, value):
+        if not col:
+            return
+        cell = ws.cell(row_start, col)
+        if type(cell).__name__ != 'MergedCell':
+            cell.value = value
+
     for i, (row_start, flight_norm, flight_str) in enumerate(headers):
         next_row = headers[i + 1][0] if i + 1 < len(headers) else None
         row_end = _block_end(ws, row_start, next_row, ws.max_row)
-        periode = _parse_periode_range(_top_cell_value(ws, row_start, cols.get('periode')))
-        days_of_week = _parse_day_of_flight(_top_cell_value(ws, row_start, cols.get('hari')))
+        fb = fallbacks.get(flight_norm, {})
 
-        for r in range(row_start, row_end + 1):
-            ym = _month_row_period(ws.cell(r, bulan_tahun_col).value, default_year)
-            if not ym:
-                continue
-            y, m = ym
+        periode = _parse_periode_range(_top_cell_value(ws, row_start, cols.get('periode')))
+        if periode is None and fb.get('periode'):
+            periode = fb['periode']
+            _write_top(cols.get('periode'), _fmt_periode(*periode))
+
+        days_of_week = _parse_day_of_flight(_top_cell_value(ws, row_start, cols.get('hari')))
+        if days_of_week is None and fb.get('days'):
+            days_of_week = fb['days']
+        # Tulis balik Day Of Flight dalam 7 karakter — template menyimpan
+        # '0204060' sebagai angka 204060 (nol depan hilang), membingungkan pembaca.
+        if days_of_week is not None:
+            _write_top(cols.get('hari'), _format_day_of_flight(days_of_week))
+
+        for r, (y, m) in _block_month_rows(ws, row_start, row_end, default_year, bulan_tahun_col):
             for day in range(1, calendar.monthrange(y, m)[1] + 1):
                 cell = ws.cell(r, day_start_col + (day - 1))
                 if type(cell).__name__ == 'MergedCell':
@@ -1052,74 +1113,14 @@ def _fill_daily_cells(ws, cols, headers, ghp_actual, default_year):
                     datetime.date(y, m, day), periode, days_of_week, ghp_actual, flight_norm)
 
 
-def generate_rekap_report(output_path: str) -> int:
+def _append_new_flight_blocks(ws, cols, month_col_map, flight_data, pdf_cache, year):
     """
-    Menghasilkan laporan rekapitulasi satu musim penuh dengan menggabungkan 
-    data realisasi (1/0) dan perubahan PPRP dari SELURUH Project yang ada.
+    Tambahkan blok untuk flight yang tidak ada di template tetapi dibawa
+    surat PPRP (mis. QG356, QG834). Dipakai Excel bulanan DAN rekap supaya
+    keduanya memuat flight yang sama. Kembalikan daftar header terbaru.
     """
-    latest_project = Project.objects.order_by('-created_at').first()
-    if not latest_project:
-        raise ValueError("Belum ada data Project sama sekali di dalam sistem.")
-        
-    template_path = latest_project.template_path
-    if not template_path or not os.path.exists(template_path):
-        from django.conf import settings
-        static_template = os.path.join(settings.BASE_DIR, 'static', 'tpl', 'form_realisasi_winter26.xlsx')
-        if os.path.exists(static_template):
-            template_path = static_template
-        else:
-            raise FileNotFoundError("Template Excel tidak ditemukan untuk generate rekap.")
-
-    schedules = ScheduleVersion.objects.all().order_by('flight_number', 'version_number', 'flight_date')
-
-    tpl_meta = load_template_flight_metadata(template_path)
-    flight_data = _build_flight_data(schedules)
-    pdf_cache = _finalize_flight_data(flight_data, tpl_meta)
-    ghp_actual = _load_ghp_actual(Project.objects.all())
-
-    wb = load_workbook(template_path)
-    ws = wb.active
-
-    cols, month_col_map = _detect_columns(ws)
     col_flight = cols['flight']
-
     headers = _find_flight_headers(ws, col_flight)
-    if not headers:
-        raise RuntimeError("Tidak ada blok flight ditemukan di template.")
-
-    for i in reversed(range(len(headers))):
-        row_start, flight_norm, flight_str = headers[i]
-        fd = flight_data.get(flight_norm)
-        if not fd:
-            continue
-
-        if fd.get('wtt'):
-            if cols.get('atd') and fd['wtt'].get('atd'):
-                ws.cell(row_start, cols['atd']).value = fd['wtt']['atd']
-            if cols.get('ata') and fd['wtt'].get('ata'):
-                ws.cell(row_start, cols['ata']).value = fd['wtt']['ata']
-
-        if cols.get('tipe'):
-            target_row = row_start
-            for rng in ws.merged_cells.ranges:
-                if (rng.min_col <= cols['tipe'] <= rng.max_col and rng.min_row <= row_start <= rng.max_row):
-                    target_row = rng.min_row
-                    break
-            cell = ws.cell(target_row, cols['tipe'])
-            if type(cell).__name__ != 'MergedCell':
-                cell.value = 'Perpanjangan'
-
-        if not fd['pprp_list']:
-            continue
-
-        next_row = headers[i + 1][0] if i + 1 < len(headers) else None
-        row_end = _block_end(ws, row_start, next_row, ws.max_row)
-        block_len = row_end - row_start + 1
-
-        _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, fd['pprp_list'], latest_project.year)
-
-    headers = _find_flight_headers(ws, col_flight)
-
     # --- Flight yang sama sekali baru (belum pernah ada di template) ---
     # Ditambahkan sebagai blok baru di baris paling bawah daftar flight (sebelum
     # legenda "Keterangan Pengisian" & blok tanda tangan), diurutkan berdasarkan
@@ -1196,14 +1197,79 @@ def generate_rekap_report(output_path: str) -> int:
             # segmen terakhir memakai tanggal akhir berlaku dari PDF surat).
             if len(pprp_sorted) > 1:
                 block_end = _insert_pprp_subblocks(
-                    ws, cols, month_col_map, insert_at, tmpl_len, pprp_sorted[1:], latest_project.year
+                    ws, cols, month_col_map, insert_at, tmpl_len, pprp_sorted[1:], year
                 )
 
             insert_cursor = block_end
 
         headers = _find_flight_headers(ws, col_flight)
 
-    _fill_daily_cells(ws, cols, headers, ghp_actual, latest_project.year)
+    return _find_flight_headers(ws, col_flight)
+
+
+def generate_rekap_report(output_path: str) -> int:
+    """
+    Menghasilkan laporan rekapitulasi satu musim penuh dengan menggabungkan 
+    data realisasi (1/0) dan perubahan PPRP dari SELURUH Project yang ada.
+    """
+    latest_project = Project.objects.order_by('-created_at').first()
+    if not latest_project:
+        raise ValueError("Belum ada data Project sama sekali di dalam sistem.")
+        
+    template_path = latest_project.template_path
+    if not template_path or not os.path.exists(template_path):
+        from django.conf import settings
+        static_template = os.path.join(settings.BASE_DIR, 'static', 'tpl', 'form_realisasi_winter26.xlsx')
+        if os.path.exists(static_template):
+            template_path = static_template
+        else:
+            raise FileNotFoundError("Template Excel tidak ditemukan untuk generate rekap.")
+
+    schedules = ScheduleVersion.objects.all().order_by('flight_number', 'version_number', 'flight_date')
+
+    tpl_meta = load_template_flight_metadata(template_path)
+    flight_data = _build_flight_data(schedules)
+    pdf_cache = _finalize_flight_data(flight_data, tpl_meta)
+    ghp_actual = _load_ghp_actual(Project.objects.all())
+
+    wb = load_workbook(template_path)
+    ws = wb.active
+
+    cols, month_col_map = _detect_columns(ws)
+    col_flight = cols['flight']
+
+    headers = _find_flight_headers(ws, col_flight)
+    if not headers:
+        raise RuntimeError("Tidak ada blok flight ditemukan di template.")
+
+    for i in reversed(range(len(headers))):
+        row_start, flight_norm, flight_str = headers[i]
+        fd = flight_data.get(flight_norm)
+        if not fd:
+            continue
+
+        if fd.get('wtt'):
+            if cols.get('atd') and fd['wtt'].get('atd'):
+                ws.cell(row_start, cols['atd']).value = fd['wtt']['atd']
+            if cols.get('ata') and fd['wtt'].get('ata'):
+                ws.cell(row_start, cols['ata']).value = fd['wtt']['ata']
+
+        # Tipe Pengajuan blok SEMULA dibiarkan sesuai template resmi.
+
+        if not fd['pprp_list']:
+            continue
+
+        next_row = headers[i + 1][0] if i + 1 < len(headers) else None
+        row_end = _block_end(ws, row_start, next_row, ws.max_row)
+        block_len = row_end - row_start + 1
+
+        _insert_pprp_subblocks(ws, cols, month_col_map, row_start, block_len, fd['pprp_list'], latest_project.year)
+
+    headers = _find_flight_headers(ws, col_flight)
+
+    headers = _append_new_flight_blocks(ws, cols, month_col_map, flight_data, pdf_cache, latest_project.year)
+
+    _fill_daily_cells(ws, cols, headers, ghp_actual, latest_project.year, _wtt_fallbacks(flight_data))
 
     seq = 1
     for row_start, flight_norm, flight_str in _find_flight_headers(ws, col_flight):
@@ -1306,16 +1372,19 @@ def get_project_report_data(project_id: int) -> dict:
     year, month = project.year, project.month
     tpl_meta = load_template_flight_metadata(project.template_path)
 
+    # Seluruh musim (semua project), sama seperti Excel bulanan & rekap: surat
+    # yang diupload ke bulan lain tetap membentuk segmen di bulan ini. Hanya
+    # cakupan GHP yang dibatasi ke project ini.
     schedules = ScheduleVersion.objects.filter(
-        project=project,
         origin='SUB',
     ).order_by('flight_number', 'version_number', 'flight_date')
 
     flight_data = _build_flight_data(schedules)
     pdf_cache = _finalize_flight_data(flight_data, tpl_meta)
     ghp_actual = _load_ghp_actual([project])
+    wtt_fallbacks = _wtt_fallbacks(flight_data)
 
-    periode_label = f"Summer {str(year)[-2:]} (S-{str(year)[-2:]})" if month in range(3, 11) else f"Winter {str(year)[-2:]} (W-{str(year)[-2:]})"
+    periode_label =f"Summer {str(year)[-2:]} (S-{str(year)[-2:]})" if month in range(3, 11) else f"Winter {str(year)[-2:]} (W-{str(year)[-2:]})"
     month_label = f"{INDONESIAN_MONTHS.get(month, '')[:3]}-{str(year)[-2:]}"
 
     def _make_days_row(flight_norm, periode_str, days_of_week):
@@ -1367,13 +1436,18 @@ def get_project_report_data(project_id: int) -> dict:
 
         # --- Baris SEMULA: bila flight ada di template resmi atau punya baseline WTT ---
         if base_meta or (fd and fd.get('wtt')):
+            fb = wtt_fallbacks.get(fn, {})
             if plist and plist[0].get('periode_semula'):
                 periode = plist[0]['periode_semula']
+            elif _parse_periode_range(base_meta.get('periode')):
+                periode = base_meta['periode']
+            elif fb.get('periode'):
+                periode = _fmt_periode(*fb['periode'])       # template kosong -> rentang WTT
             else:
-                periode = base_meta.get('periode') or f"29 MAR {year}/24 OKT {year}"
+                periode = base_meta.get('periode') or ''
             days_of_week = base_meta.get('days')
-            if days_of_week is None and fd and fd.get('v1_times'):
-                days_of_week = frozenset(dt.isoweekday() for dt in fd['v1_times'])
+            if days_of_week is None:
+                days_of_week = fb.get('days')
 
             day_cells, total_planned, total_operated = _make_days_row(fn, periode, days_of_week)
             grand_planned += total_planned
