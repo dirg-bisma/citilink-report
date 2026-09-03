@@ -57,6 +57,18 @@
 **Date:** 2026-08-12  
 **Rationale:** Internal app, no cloud needed. Django FileField + local media directory.
 
+### D5: Surat PPRP berlaku lintas bulan (fan-out & adopt)
+**Date:** 2026-09-03  
+**Rationale:** Satu surat PPRP (mis. AU.012/47/2, 13 Jul–24 Okt) berlaku untuk beberapa bulan, tetapi record `SourceFile` terikat satu project. Diputuskan: surat cukup diupload SEKALI. Setelah diproses di satu bulan, `core.ingest._fan_out_letter` mendaftarkan salinan (file fisik sama, `file_hash` sama) ke setiap project bulan lain di dalam rentang berlakunya dan menerapkannya; project bulan baru (WTT diupload) menarik surat lama yang mencakupnya lewat `adopt_letters`. `manage.py sync_pprp` menjalankan hal yang sama untuk semua bulan (idempoten, dipakai untuk backfill). Menghapus surat mencabutnya dari SEMUA bulan; file fisik dihapus hanya bila tidak ada salinan lain.
+
+### D6: Presedensi surat untuk satu flight+tanggal
+**Date:** 2026-09-03  
+**Rationale:** Sebelumnya `update_or_create` v2 dengan kunci (project, flight, tanggal) dimenangkan surat yang diupload belakangan. Sekarang `core.services.letter_rank`: tanggal mulai berlaku segmen terbaru menang, seri dipecah dengan angka nomor surat, lalu hash file. Hasil DB tidak bergantung pada urutan upload (dikunci tes `tests.test_cross_month`). Saat surat dicabut, surat lain di bulan itu diterapkan ulang supaya tanggal yang ditinggalkan kembali ke surat berikutnya, bukan langsung ke WTT.
+
+### D7: Pintu ketiga ditutup
+**Date:** 2026-09-03  
+**Rationale:** Aksi admin "Process selected files" memanggil parser langsung tanpa validasi/resync (bisa membuat jadwal dobel). Diganti aksi "Sinkronkan ulang bulan" yang memakai `core.ingest.resync_project` — jalur yang sama dengan halaman Upload Data.
+
 ---
 
 **Note:** Mark questions RESOLVED when decided. Add new questions as discovered.

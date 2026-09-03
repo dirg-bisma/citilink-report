@@ -249,7 +249,8 @@ def _assign_pprp_periods(fn, fd, pdf_cache, template_start=None):
       sebelum PPRP pertama berlaku). Awal baseline = tanggal mulai di kolom
       PERIODE template (izin musim resmi, mis. 29 MAR); fallback ke tanggal
       WTT pertama di DB hanya bila template tidak memuat flight itu.
-    - periode entri non-terakhir berakhir sehari sebelum entri berikutnya mulai.
+    - periode entri non-terakhir berakhir sehari sebelum entri berikutnya mulai
+      (atau pada tanggal akhir berlaku di surat bila itu lebih dulu).
     - periode entri TERAKHIR berakhir pada tanggal akhir berlaku di surat PPRP
       (diparse dari PDF); fallback ke tanggal WTT terakhir bila PDF tak terbaca.
     Sekaligus isi pprp['days'] (pola hari segmen) dari surat; fallback ke hari
@@ -276,10 +277,16 @@ def _assign_pprp_periods(fn, fd, pdf_cache, template_start=None):
                 f"{semula_start.day} {MONTH_ABBR[semula_start.month]} {semula_start.year}"
                 f"/{semula_end.day} {MONTH_ABBR[semula_end.month]} {semula_end.year}"
             )
+        letter_end = letter.get('end_date') if letter else None
         if i + 1 < len(plist) and plist[i + 1].get('pprp_date'):
             seg_end = plist[i + 1]['pprp_date'] - datetime.timedelta(days=1)
+            # Segmen berikutnya mulai setelah jeda (mis. QG723: 17-29 Jun lalu
+            # 2 Jul-23 Okt): periode tetap berakhir sesuai surat, bukan
+            # dipanjangkan sampai sehari sebelum segmen berikutnya.
+            if letter_end and letter_end < seg_end:
+                seg_end = letter_end
         else:
-            seg_end = (letter.get('end_date') if letter else None) or wtt_end
+            seg_end = letter_end or wtt_end
         if seg_end:
             pprp['periode'] = (
                 f"{d_pprp.day} {MONTH_ABBR[d_pprp.month]} {d_pprp.year}"

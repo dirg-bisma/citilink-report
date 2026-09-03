@@ -38,57 +38,89 @@ def _utc_time_to_local(time_obj, offset_hours):
 
 def delete_source_file(source_file_id: int) -> dict:
     """
-    Cascaded deletion of a SourceFile and all its generated/associated database records.
+    Hapus SourceFile beserta seluruh data turunannya.
+
+    WTT : semua jadwal (v1 + v2 turunannya) project itu dihapus.
+    PPRP: surat adalah SATU dokumen yang bisa berlaku di beberapa bulan; salinan
+          surat yang sama (file_hash sama) di project bulan lain ikut dihapus,
+          supaya tidak ada bulan yang diam-diam masih memakai surat yang sudah
+          dicabut. Di tiap bulan: baris v2 surat itu dihapus, surat lain yang
+          masih ada diterapkan ulang (mengisi tanggal yang tadinya dimenangkan
+          surat ini), baris WTT dihidupkan kembali bila tidak ada pengganti,
+          lalu GHP dicocokkan ulang.
+    GHP : flag operasional + jam GHP project itu direset.
+    File fisik dihapus hanya bila tidak ada SourceFile lain yang memakainya.
     """
     source_file = SourceFile.objects.get(id=source_file_id)
     project = source_file.project
     file_type = source_file.file_type
     file_path = source_file.file_path
-    
+
     affected_count = 0
+    projects = []
     with transaction.atomic():
         if file_type == 'WTT':
             # Deletes all schedules created by this WTT (including child PPRPs)
             deleted_tuple = ScheduleVersion.objects.filter(project=project, source_wtt=source_file).delete()
             affected_count = deleted_tuple[0]
+            projects.append(project)
+            source_file.delete()
         elif file_type == 'PPRP':
-            # Deletes all version 2 schedules created by this PPRP
-            v2_rows = ScheduleVersion.objects.filter(project=project, source_pprp=source_file)
-            affected_keys = set(v2_rows.values_list('flight_number', 'flight_date'))
-            deleted_tuple = v2_rows.delete()
-            affected_count = deleted_tuple[0]
-            # Hidupkan kembali baris WTT (v1) yang dinonaktifkan surat ini dan
-            # kini tidak punya pengganti aktif — kalau tidak, flight itu lenyap
-            # dari laporan padahal jadwal WTT-nya masih berlaku.
-            for fn, d in affected_keys:
-                if not ScheduleVersion.objects.filter(project=project, flight_number=fn, flight_date=d, is_active=True).exists():
-                    ScheduleVersion.objects.filter(project=project, flight_number=fn, flight_date=d, version_number=1).update(is_active=True)
-            # Baris v1 yang baru aktif belum punya flag GHP -> cocokkan ulang.
-            ghp_file = SourceFile.objects.filter(project=project, file_type='GHP', status='SUCCESS').order_by('-uploaded_at').first()
-            if ghp_file and affected_keys:
-                process_ghp(project.id, ghp_file.id)
+            siblings = list(SourceFile.objects.filter(file_type='PPRP', file_hash=source_file.file_hash)
+                            .order_by('project__year', 'project__month'))
+            for sib in siblings:
+                affected_count += _remove_letter_from_project(sib)
+                projects.append(sib.project)
+                sib.delete()
         elif file_type == 'GHP':
             # Reset operational flag + jam GHP for all schedules in this project
             affected_count = ScheduleVersion.objects.filter(project=project, operational_flag=True).update(
                 operational_flag=False, ghp_std=None, ghp_atd=None)
-            
-        # Delete SourceFile model
-        source_file.delete()
-        
-        # Delete physical file
-        if file_path and os.path.exists(file_path):
+            projects.append(project)
+            source_file.delete()
+
+        # Delete physical file (bila tidak dipakai record lain, mis. salinan surat)
+        if file_path and os.path.exists(file_path) and not SourceFile.objects.filter(file_path=file_path).exists():
             try:
                 os.remove(file_path)
             except OSError:
                 pass
-                
+
     return {
         'file_id': source_file_id,
         'file_type': file_type,
         'affected_count': affected_count,
         'project_id': project.id,
-        'project_code': project.project_id
+        'project_code': project.project_id,
+        'projects': [f"{p.year}-{p.month:02d}" for p in projects],
+        'project_ids': [p.id for p in projects],
     }
+
+
+def _remove_letter_from_project(pprp_file) -> int:
+    """Cabut satu surat dari satu project (lihat delete_source_file). Kembalikan
+    jumlah baris v2 yang dihapus."""
+    project = pprp_file.project
+    v2_rows = ScheduleVersion.objects.filter(project=project, source_pprp=pprp_file)
+    affected_keys = set(v2_rows.values_list('flight_number', 'flight_date'))
+    deleted = v2_rows.delete()[0]
+    if not affected_keys:
+        return deleted
+    # Surat lain di bulan ini mungkin juga mencakup tanggal-tanggal itu tapi
+    # kalah saat diterapkan; terapkan ulang supaya mereka mengisi kekosongan.
+    others = SourceFile.objects.filter(project=project, file_type='PPRP', status='SUCCESS').exclude(id=pprp_file.id)
+    for other in sorted(others, key=letter_sort_key):
+        process_pprp(project.id, other.id)
+    # Hidupkan kembali baris WTT (v1) yang tidak punya pengganti aktif — kalau
+    # tidak, flight itu lenyap dari laporan padahal jadwal WTT-nya masih berlaku.
+    for fn, d in affected_keys:
+        if not ScheduleVersion.objects.filter(project=project, flight_number=fn, flight_date=d, is_active=True).exists():
+            ScheduleVersion.objects.filter(project=project, flight_number=fn, flight_date=d, version_number=1).update(is_active=True)
+    # Baris yang baru aktif belum punya flag GHP -> cocokkan ulang.
+    ghp_file = SourceFile.objects.filter(project=project, file_type='GHP', status='SUCCESS').order_by('-uploaded_at').first()
+    if ghp_file:
+        process_ghp(project.id, ghp_file.id)
+    return deleted
 
 
 def process_wtt(project_id: int, wtt_file_id: int):
@@ -132,14 +164,52 @@ def process_wtt(project_id: int, wtt_file_id: int):
     return created
 
 
+def letter_rank(pprp_date, letter_number, file_hash=''):
+    """
+    Urutan keberlakuan surat untuk satu flight+tanggal (yang lebih besar menang):
+    1. tanggal mulai berlaku segmen (surat yang berlaku lebih baru menggantikan
+       surat sebelumnya — prinsip yang sama dengan pemotongan segmen di laporan);
+    2. angka-angka di nomor surat (mis. AU.012/50/15/... > AU.012/47/2/...);
+    3. hash file, sekadar pemutus seri yang deterministik.
+    Tidak bergantung pada urutan upload, jadi hasil DB sama apa pun urutannya.
+    """
+    nums = tuple(int(x) for x in re.findall(r'\d+', letter_number or ''))
+    return (pprp_date or datetime.min.date(), nums, file_hash or '')
+
+
+def letter_sort_key(source_file):
+    """Kunci urutan penerapan surat (SourceFile PPRP) dalam satu project."""
+    return (source_file.uploaded_at, source_file.id)
+
+
+def letter_sub_flights(flights):
+    """Baris MENJADI yang menjadi tanggung jawab laporan: keberangkatan SUB, bukan charter."""
+    return [f for f in (flights or [])
+            if f.get('origin') == 'SUB' and not is_charter_flight(f.get('flight_number'))]
+
+
+def letter_covers_month(flights, year, month) -> bool:
+    """Benar bila ada rute SUB di surat yang rentang berlakunya menyentuh bulan itu."""
+    import calendar
+    from datetime import date
+    m_start = date(year, month, 1)
+    m_end = date(year, month, calendar.monthrange(year, month)[1])
+    return any(f['pprp_date'] <= m_end and f['end_date'] >= m_start for f in letter_sub_flights(flights))
+
+
 def process_pprp(project_id: int, pprp_file_id: int):
     """
     Apply PPRP: buat ScheduleVersion baru (version_number=2) untuk setiap hari aktif
     sesuai day_pattern dan rentang tanggal mulai berlaku s/d akhir bulan project.
+
+    Satu flight+tanggal hanya punya SATU baris v2. Bila tanggal itu sudah diisi
+    surat lain, pemenangnya ditentukan letter_rank (surat berlaku terbaru
+    menang), bukan urutan upload; surat yang kalah tidak menyentuh baris itu.
+    Menerapkan ulang surat yang sama selalu menyegarkan barisnya sendiri.
     """
     import calendar
     from datetime import date
-    
+
     project = Project.objects.get(id=project_id)
     pprp_file = SourceFile.objects.get(id=pprp_file_id)
 
@@ -157,18 +227,14 @@ def process_pprp(project_id: int, pprp_file_id: int):
 
     created = 0
     with transaction.atomic():
-        for flight in data['flights']:
-            # Hanya proses rute keberangkatan dari Surabaya (origin == 'SUB')
-            if flight.get('origin') != 'SUB':
-                continue
-            # Charter/extra flight (4 digit) tidak masuk laporan — lihat is_charter_flight.
-            if is_charter_flight(flight['flight_number']):
-                continue
-
+        # Segmen diterapkan urut tanggal berlaku: bila satu surat memuat dua
+        # segmen flight yang sama dan tanggalnya beririsan, segmen terbaru menang.
+        for flight in sorted(letter_sub_flights(data['flights']), key=lambda f: f['pprp_date']):
             f_num = flight['flight_number']
             pprp_start = flight['pprp_date']
             pprp_end = flight['end_date']
             day_pat = flight.get('day_pattern', '1234567')
+            my_rank = letter_rank(pprp_start, data['letter_number'], pprp_file.file_hash)
 
             eff_start = max(m_start, pprp_start)
             eff_end = min(m_end, pprp_end)
@@ -183,6 +249,16 @@ def process_pprp(project_id: int, pprp_file_id: int):
                 # Check if day is active in day_pattern
                 if iso_day not in day_pat:
                     continue
+
+                # Surat lain yang lebih baru sudah berlaku pada tanggal ini?
+                existing = ScheduleVersion.objects.filter(
+                    project=project, flight_number=f_num, flight_date=cur_date, version_number=2,
+                ).select_related('source_pprp').first()
+                if existing and existing.source_pprp_id not in (None, pprp_file.id):
+                    other_rank = letter_rank(existing.pprp_date, existing.pprp_letter,
+                                             existing.source_pprp.file_hash)
+                    if other_rank > my_rank:
+                        continue
 
                 # Find parent WTT record on this date
                 parent = ScheduleVersion.objects.filter(

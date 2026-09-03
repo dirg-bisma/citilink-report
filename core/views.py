@@ -34,6 +34,10 @@ def upload_source_file_view(request):
             try:
                 res = delete_source_file(int(file_id))
                 msg = f"File {res['file_type']} berhasil dihapus ({res['affected_count']} data terkait dibersihkan)."
+                if res['file_type'] == 'PPRP' and len(res.get('projects', [])) > 1:
+                    names = ', '.join(
+                        f"{MONTH_NAMES.get(int(p.split('-')[1]), p)} {p.split('-')[0]}" for p in res['projects'])
+                    msg += f" Surat ini berlaku di {len(res['projects'])} bulan dan dicabut dari semuanya: {names}."
                 if is_ajax:
                     return JsonResponse({
                         'success': True,

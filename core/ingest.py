@@ -11,8 +11,13 @@ pilihan multi-file dan tetap melapor "Berhasil" (kasus QG356 hilang,
   membatalkan file lain dalam batch yang sama;
 - hasil per file dilaporkan apa adanya: diproses / dilewati / gagal + alasan;
 - file PPRP diterima bila bulan project berada di DALAM rentang berlaku surat
-  (bukan sekadar cocok bulan mulainya), supaya satu surat lintas bulan bisa
-  dimasukkan ke tiap project bulan yang dicakupnya;
+  (bukan sekadar cocok bulan mulainya). Surat adalah satu dokumen yang bisa
+  berlaku beberapa bulan: setelah diproses di satu bulan, surat itu otomatis
+  disalin & diterapkan ke setiap project bulan lain yang dicakupnya (fan-out),
+  dan project bulan baru otomatis menarik surat-surat lama yang mencakupnya
+  (adopt). Satu surat cukup diupload SEKALI;
+- satu flight+tanggal hanya dipegang satu surat: yang tanggal berlakunya
+  terbaru menang (core.services.letter_rank), bukan yang diupload belakangan;
 - satu bulan hanya punya SATU file WTT dan SATU file GHP. File kedua yang
   berbeda isinya ditolak, kecuali pemanggil memberi replace=True (mode
   "Atur Ulang" di halaman Upload Data): file lama dihapus beserta data
@@ -20,10 +25,8 @@ pilihan multi-file dan tetap melapor "Berhasil" (kasus QG356 hilang,
 - setelah batch selesai, data turunan disinkronkan ulang (PPRP -> GHP,
   WTT -> PPRP -> GHP) supaya urutan upload tidak mengubah hasil akhir.
 """
-import calendar
 import os
 from dataclasses import dataclass, field
-from datetime import date
 
 from django.core.files.storage import FileSystemStorage
 
@@ -31,7 +34,8 @@ from core.models import Project, SourceFile
 from core.parsers.ghp import detect_ghp_period
 from core.parsers.pprp import parse_pprp
 from core.parsers.wtt import detect_wtt_period
-from core.services import delete_source_file, process_ghp, process_pprp, process_wtt, _fmt_date_id
+from core.services import (delete_source_file, process_ghp, process_pprp, process_wtt, _fmt_date_id,
+                           letter_covers_month, letter_sort_key, letter_sub_flights)
 
 UPLOAD_DIR = os.path.join('media', 'uploads')
 
@@ -62,6 +66,7 @@ class FileResult:
     warnings: list = field(default_factory=list)
     source_file_id: int | None = None
     replaced_filename: str | None = None   # nama file lama yang digantikan (mode Atur Ulang)
+    also_applied_to: list = field(default_factory=list)  # nama periode bulan lain penerima surat (fan-out)
 
     def as_dict(self):
         return {
@@ -72,6 +77,7 @@ class FileResult:
             'warnings': list(self.warnings),
             'source_file_id': self.source_file_id,
             'replaced_filename': self.replaced_filename,
+            'also_applied_to': list(self.also_applied_to),
         }
 
 
@@ -156,12 +162,13 @@ def ingest_uploaded_files(file_type, uploaded_files, user, project=None, upload_
     touched_projects = []
 
     for uploaded in uploaded_files:
-        fr, proj = _ingest_one(fs, file_type, uploaded, user, project, replace)
+        fr, proj, extra_projects = _ingest_one(fs, file_type, uploaded, user, project, replace)
         result.files.append(fr)
         if fr.status == 'processed' and proj is not None:
             result.project = proj
-            if proj not in touched_projects:
-                touched_projects.append(proj)
+            for p in [proj] + extra_projects:
+                if p not in touched_projects:
+                    touched_projects.append(p)
 
     for proj in touched_projects:
         _resync_derived_data(result, proj)
@@ -193,7 +200,7 @@ def _ingest_one(fs, file_type, uploaded, user, project, replace):
             hint = (" Klik Atur Ulang, pilih bulan ini, lalu upload lagi untuk membangun ulang."
                     if file_type in ('WTT', 'GHP') else "")
             return FileResult(uploaded.name, 'skipped',
-                              f"Sudah pernah diupload untuk {period_name(proj.year, proj.month)}.{hint}"), proj
+                              f"Sudah pernah diupload untuk {period_name(proj.year, proj.month)}.{hint}"), proj, []
 
         replaced = _replace_existing_if_allowed(file_type, proj, replace)
 
@@ -211,8 +218,15 @@ def _ingest_one(fs, file_type, uploaded, user, project, replace):
             message += " Dibangun ulang dari file yang sama."
         elif replaced:
             message += f" Menggantikan file lama: {replaced}."
-        return FileResult(uploaded.name, 'processed', message, count, warnings,
-                          source_file.id, replaced_filename=replaced), proj
+        extra_projects = []
+        if file_type == 'PPRP':
+            extra_projects = _fan_out_letter(source_file, user)
+            if extra_projects:
+                names = ', '.join(period_name(p.year, p.month) for p in extra_projects)
+                message += f" Surat ini juga berlaku untuk {names} dan sudah diterapkan ke bulan itu."
+        return FileResult(uploaded.name, 'processed', message, count, warnings, source_file.id,
+                          replaced_filename=replaced,
+                          also_applied_to=[period_name(p.year, p.month) for p in extra_projects]), proj, extra_projects
 
     except Exception as e:
         # Salah kartu (mis. file WTT diupload lewat kartu PPRP) menghasilkan
@@ -225,7 +239,7 @@ def _ingest_one(fs, file_type, uploaded, user, project, replace):
         if source_file is not None:
             source_file.delete()
         _remove_file(file_path)
-        return FileResult(uploaded.name, 'failed', message), None
+        return FileResult(uploaded.name, 'failed', message), None, []
 
 
 def _detect_document_type(file_path):
@@ -280,14 +294,19 @@ def _resolve_project(file_type, file_path, project, user, pprp_data):
         return project
 
     if file_type == 'PPRP':
-        start = pprp_data.get('pprp_date') if pprp_data else None
-        if start is None:
+        sub_flights = letter_sub_flights(pprp_data.get('flights') if pprp_data else None)
+        if not sub_flights:
             raise ValueError("Tidak dapat mendeteksi tanggal berlaku pada file PPRP ini.")
-        proj = Project.objects.filter(year=start.year, month=start.month).first()
-        if proj is None:
-            raise ValueError(f"Belum ada project {period_name(start.year, start.month)}. "
-                             f"Upload WTT bulan itu terlebih dahulu.")
-        return proj
+        # Surat berlaku lintas bulan: masukkan ke project bulan PERTAMA yang ada
+        # di dalam rentangnya; bulan-bulan berikutnya dapat lewat fan-out.
+        for cand in Project.objects.order_by('year', 'month'):
+            if letter_covers_month(sub_flights, cand.year, cand.month):
+                return cand
+        rng_start = min(f['pprp_date'] for f in sub_flights)
+        rng_end = max(f['end_date'] for f in sub_flights)
+        raise ValueError(f"Belum ada project untuk bulan yang dicakup surat ini "
+                         f"({_fmt_date_id(rng_start)} s/d {_fmt_date_id(rng_end)}). "
+                         f"Upload WTT bulan itu terlebih dahulu.")
 
     # GHP: file hanya memuat DD/MM, jadi cari project bulan itu yang terbaru.
     month = detect_ghp_period(file_path)
@@ -330,9 +349,7 @@ def _validate_period(file_type, file_path, proj, pprp_data):
         if not sub_flights:
             raise ValueError("Surat ini tidak memuat rute keberangkatan dari SUB.")
 
-        m_start = date(proj.year, proj.month, 1)
-        m_end = date(proj.year, proj.month, calendar.monthrange(proj.year, proj.month)[1])
-        if not any(f['pprp_date'] <= m_end and f['end_date'] >= m_start for f in sub_flights):
+        if not letter_covers_month(sub_flights, proj.year, proj.month):
             rng_start = min(f['pprp_date'] for f in sub_flights)
             rng_end = max(f['end_date'] for f in sub_flights)
             raise ValueError(
@@ -371,27 +388,140 @@ def _resync_derived_data(result, proj):
     """
     Terapkan ulang data turunan supaya hasil akhir tidak bergantung pada
     urutan upload:
-    - setelah WTT : surat-surat PPRP project ini diterapkan ulang (baris v2
-                    yang ikut terhapus saat WTT dihapus akan terbentuk lagi),
-                    lalu GHP dicocokkan ulang;
-    - setelah PPRP: GHP dicocokkan ulang (jadwal baru dapat flag operasional).
+    - setelah WTT : surat dari bulan lain yang mencakup bulan ini ditarik
+                    (adopt), semua surat project ini diterapkan ulang (baris v2
+                    yang ikut terhapus saat WTT dihapus terbentuk lagi), lalu
+                    GHP dicocokkan ulang — lihat resync_project;
+    - setelah PPRP: GHP dicocokkan ulang (jadwal baru dapat flag operasional),
+                    termasuk di bulan-bulan penerima fan-out.
     """
     if result.file_type == 'WTT':
-        pprp_files = SourceFile.objects.filter(project=proj, file_type='PPRP', status='SUCCESS').order_by('uploaded_at', 'id')
-        n = 0
-        for sf in pprp_files:
-            process_pprp(proj.id, sf.id)
-            n += 1
-        if n:
-            result.resync_messages.append(f"{n} surat PPRP {period_name(proj.year, proj.month)} diterapkan ulang.")
+        messages, warnings = resync_project(proj)
+        result.resync_messages.extend(messages)
+        result.warnings.extend(warnings)
+        return
 
-    if result.file_type in ('WTT', 'PPRP'):
-        ghp_file = SourceFile.objects.filter(project=proj, file_type='GHP', status='SUCCESS').order_by('-uploaded_at').first()
-        if ghp_file:
-            ghp = process_ghp(proj.id, ghp_file.id)
-            result.resync_messages.append(
-                f"GHP {period_name(proj.year, proj.month)} dicocokkan ulang: {ghp.matched} jadwal beroperasi.")
-            result.warnings.extend(ghp.warnings())
+    if result.file_type == 'PPRP':
+        msg, warnings = _resync_ghp(proj)
+        if msg:
+            result.resync_messages.append(msg)
+        result.warnings.extend(warnings)
+
+
+def _resync_ghp(proj):
+    ghp_file = SourceFile.objects.filter(project=proj, file_type='GHP', status='SUCCESS').order_by('-uploaded_at').first()
+    if not ghp_file:
+        return None, []
+    ghp = process_ghp(proj.id, ghp_file.id)
+    return (f"GHP {period_name(proj.year, proj.month)} dicocokkan ulang: {ghp.matched} jadwal beroperasi.",
+            ghp.warnings())
+
+
+def _clone_letter(source_file, proj):
+    """Daftarkan salinan surat (file fisik yang sama) ke project lain lalu
+    terapkan. Kembalikan SourceFile salinan, atau None bila gagal (salinan
+    yang gagal tidak disimpan)."""
+    clone = SourceFile.objects.create(
+        project=proj,
+        file_type='PPRP',
+        file_path=source_file.file_path,
+        file_hash=source_file.file_hash,
+        uploaded_by=source_file.uploaded_by,
+        status='PROCESSING',
+        parser_version=source_file.parser_version,
+    )
+    try:
+        process_pprp(proj.id, clone.id)
+        clone.refresh_from_db()
+    except Exception:
+        clone.delete()
+        return None
+    if clone.status != 'SUCCESS':
+        clone.delete()
+        return None
+    return clone
+
+
+def _fan_out_letter(source_file, user=None):
+    """
+    Setelah surat diproses di satu bulan, terapkan juga ke setiap project bulan
+    lain yang berada di dalam rentang berlakunya dan belum memilikinya.
+    Kembalikan daftar project penerima (urut bulan).
+    """
+    data = parse_pprp(source_file.file_path)
+    targets = []
+    for proj in Project.objects.exclude(id=source_file.project_id).order_by('year', 'month'):
+        if not letter_covers_month(data['flights'], proj.year, proj.month):
+            continue
+        if SourceFile.objects.filter(project=proj, file_type='PPRP', file_hash=source_file.file_hash).exists():
+            continue
+        if _clone_letter(source_file, proj) is not None:
+            targets.append(proj)
+    return targets
+
+
+def adopt_letters(proj):
+    """
+    Tarik surat-surat dari project bulan lain yang mencakup bulan ini tapi
+    belum ada di project ini (mis. project bulan baru dibuat setelah suratnya
+    diupload ke bulan sebelumnya). Kembalikan daftar (nomor surat, nama file).
+    """
+    have = set(SourceFile.objects.filter(project=proj, file_type='PPRP').values_list('file_hash', flat=True))
+    adopted = []
+    candidates = (SourceFile.objects.filter(file_type='PPRP', status='SUCCESS')
+                  .exclude(project=proj).select_related('project')
+                  .order_by('project__year', 'project__month', 'uploaded_at', 'id'))
+    for sf in candidates:
+        if sf.file_hash in have or not os.path.exists(sf.file_path):
+            continue
+        try:
+            data = parse_pprp(sf.file_path)
+        except Exception:
+            continue
+        if not letter_covers_month(data['flights'], proj.year, proj.month):
+            continue
+        have.add(sf.file_hash)
+        if _clone_letter(sf, proj) is not None:
+            adopted.append((data['letter_number'], os.path.basename(sf.file_path)))
+    return adopted
+
+
+def resync_project(proj):
+    """
+    Susun ulang data turunan satu bulan dari file-file sumbernya (idempoten):
+    adopt surat bulan lain -> terapkan ulang semua surat -> hidupkan baris WTT
+    tanpa pengganti -> cocokkan ulang GHP. Kembalikan (pesan, peringatan).
+    Dipakai setelah WTT diupload/diganti, oleh aksi admin, dan oleh perintah
+    `manage.py sync_pprp`.
+    """
+    from core.models import ScheduleVersion
+
+    messages, warnings = [], []
+    adopted = adopt_letters(proj)
+    if adopted:
+        names = '; '.join(f"{num} ({fname})" for num, fname in adopted)
+        messages.append(f"{len(adopted)} surat PPRP dari bulan lain berlaku untuk "
+                        f"{period_name(proj.year, proj.month)} dan diterapkan otomatis: {names}.")
+
+    pprp_files = sorted(SourceFile.objects.filter(project=proj, file_type='PPRP', status='SUCCESS'), key=letter_sort_key)
+    for sf in pprp_files:
+        process_pprp(proj.id, sf.id)
+    if pprp_files:
+        messages.append(f"{len(pprp_files)} surat PPRP {period_name(proj.year, proj.month)} diterapkan ulang.")
+
+    # Baris WTT yang tidak (lagi) tertutup surat harus aktif — pengaman bila ada
+    # baris v2 yang hilang tanpa lewat delete_source_file.
+    inactive_v1 = ScheduleVersion.objects.filter(project=proj, version_number=1, is_active=False)
+    for sv in inactive_v1.only('id', 'flight_number', 'flight_date'):
+        if not ScheduleVersion.objects.filter(project=proj, flight_number=sv.flight_number,
+                                              flight_date=sv.flight_date, version_number=2, is_active=True).exists():
+            ScheduleVersion.objects.filter(id=sv.id).update(is_active=True)
+
+    msg, ghp_warnings = _resync_ghp(proj)
+    if msg:
+        messages.append(msg)
+    warnings.extend(ghp_warnings)
+    return messages, warnings
 
 
 def _remove_file(file_path):

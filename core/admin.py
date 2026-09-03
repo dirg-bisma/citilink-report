@@ -10,8 +10,7 @@ from unfold.admin import ModelAdmin
 from unfold.decorators import display
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from core.models import Project, SourceFile, ScheduleVersion
-from core.services import process_wtt, process_pprp, process_ghp
-from core.ingest import ingest_uploaded_files
+from core.ingest import ingest_uploaded_files, resync_project
 from core.report import generate_report
 import os
 
@@ -170,18 +169,21 @@ class SourceFileAdmin(ModelAdmin):
     list_display = ['project', 'file_type', 'status', 'uploaded_by', 'uploaded_at']
     list_filter = ['file_type', 'status']
     search_fields = ['project__project_id']
-    actions = ['process_files']
-    
-    @admin.action(description='Process selected files')
-    def process_files(self, request, queryset):
-        for sf in queryset:
-            if sf.file_type == 'WTT':
-                process_wtt(sf.project.id, sf.id)
-            elif sf.file_type == 'PPRP':
-                process_pprp(sf.project.id, sf.id)
-            elif sf.file_type == 'GHP':
-                process_ghp(sf.project.id, sf.id)
-        self.message_user(request, f'{queryset.count()} files processed')
+    actions = ['resync_months']
+
+    @admin.action(description='Sinkronkan ulang bulan file terpilih (surat PPRP + GHP)')
+    def resync_months(self, request, queryset):
+        # Dulu aksi ini memanggil parser langsung ("Process selected files")
+        # tanpa validasi dan tanpa sinkronisasi turunan — pintu ketiga yang
+        # bisa membuat jadwal dobel. Sekarang memakai jalur yang sama dengan
+        # halaman Upload Data: susun ulang bulan dari file-file sumbernya.
+        projects = {sf.project for sf in queryset.select_related('project')}
+        for proj in sorted(projects, key=lambda p: (p.year, p.month)):
+            messages_, warnings = resync_project(proj)
+            for m in messages_ or [f"{proj}: tidak ada yang perlu disinkronkan."]:
+                self.message_user(request, m)
+            for w in warnings:
+                self.message_user(request, w, level='WARNING')
 
 
 from unfold.contrib.filters.admin import DropdownFilter
