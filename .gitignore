@@ -28,3 +28,6 @@ prof*.txt
 profile*.txt
 # Backup database (lokal, jangan di-commit)
 backups/
+
+# Konfigurasi lokal Claude Code (folder ber-ACL khusus, jangan dilacak git)
+.claude/
