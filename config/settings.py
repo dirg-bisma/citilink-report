@@ -152,24 +152,42 @@ from django.urls import reverse_lazy
 
 UNFOLD = {
     "STYLES": [
-        lambda request: "/static/css/unfold_override.css?v=2",
+        lambda request: "/static/css/unfold_override.css?v=7",
     ],
     "SITE_TITLE": "CITILINK AVIOR",
     "SITE_HEADER": "CITILINK AVIOR",
     "SITE_SUBHEADER": "AViation Operations Report",
-    "SITE_URL": "/",
+    # Aplikasi ini tidak punya situs publik di luar admin: "/" hanya redirect
+    # ke /admin/, sehingga tombol "Return to site" di halaman login berputar
+    # kembali ke halaman login. None menyembunyikannya (unfold/helpers/
+    # unauthenticated_header.html membungkusnya dengan {% if site_url %}).
+    "SITE_URL": None,
     "COLORS": {
+        # Satu tangga warna yang diturunkan dari hijau Citilink (#006b32 = 600).
+        # Sebelumnya 50-500 dan 700-900 memakai hijau Tailwind sehingga 700
+        # lebih terang daripada 600; kelas primary-* jadi tidak bisa dipercaya
+        # dan template terpaksa menulis #006b32 secara manual.
         "primary": {
-            "50": "#f0fdf4",
-            "100": "#dcfce7",
-            "200": "#bbf7d0",
-            "300": "#86efac",
-            "400": "#4ade80",
-            "500": "#22c55e",
+            "50": "#f0f8f3",
+            "100": "#dcefe3",
+            "200": "#b8dfc7",
+            "300": "#86c8a3",
+            "400": "#4faa79",
+            "500": "#1f8a55",
             "600": "#006b32",  # Citilink primary green
-            "700": "#15803d",
-            "800": "#166534",
-            "900": "#14532d",
+            "700": "#005a2a",
+            "800": "#004a23",
+            "900": "#003b1c",
+            "950": "#002310",
+        },
+        # Unfold membangkitkan --color-<nama>-<bobot> dari setiap kunci di sini
+        # (lihat unfold/layouts/skeleton.html), jadi bobot tambahan boleh
+        # didaftarkan. "350" adalah titik tengah base-300 (oklch 87.2%) dan
+        # base-400 (oklch 70.7%), dipakai untuk border input di halaman login:
+        # 300 terlalu tipis, 400 terlalu tegas. Bobot base lain tetap bawaan
+        # Unfold karena deep-merge hanya menimpa kunci yang disebut.
+        "base": {
+            "350": "oklch(79% .016 259.8)",
         },
     },
     "SIDEBAR": {

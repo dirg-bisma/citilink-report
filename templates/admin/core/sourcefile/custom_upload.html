@@ -7,9 +7,9 @@
 
 {% block breadcrumbs %}
 <div class="mb-4">
-    <a href="{% url 'admin:index' %}" class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">{% trans 'Home' %}</a>
-    <span class="mx-2 text-sm text-gray-500">/</span>
-    <span class="text-sm text-gray-900 dark:text-gray-100">{% trans 'Upload Data' %}</span>
+    <a href="{% url 'admin:index' %}" class="text-sm text-base-500 hover:text-base-700 dark:text-base-400 dark:hover:text-base-200">{% trans 'Home' %}</a>
+    <span class="mx-2 text-sm text-base-500 dark:text-base-400">/</span>
+    <span class="text-sm text-font-important-light dark:text-font-important-dark">{% trans 'Upload Data' %}</span>
 </div>
 {% endblock %}
 
@@ -17,7 +17,7 @@
     {% include "unfold/helpers/messages.html" %}
 
     <style>
-        /* Progress bar animation */
+        /* Progress bar tak tentu; kelas .uploading/.parsing/.done/.error diatur oleh JS. */
         @keyframes progress-indeterminate {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(250%); }
@@ -26,10 +26,10 @@
             height: 6px;
             border-radius: 3px;
             overflow: hidden;
-            background: #e5e7eb;
+            background: var(--color-base-200);
         }
         .dark .progress-bar-container {
-            background: #374151;
+            background: var(--color-base-700);
         }
         .progress-bar-fill {
             height: 100%;
@@ -37,53 +37,52 @@
             border-radius: 3px;
             animation: progress-indeterminate 1.5s ease-in-out infinite;
         }
-        .progress-bar-fill.uploading { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
-        .progress-bar-fill.parsing { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-        .progress-bar-fill.done { 
-            width: 100% !important; 
+        .progress-bar-fill.uploading { background: var(--color-primary-600); }
+        .progress-bar-fill.parsing { background: var(--color-primary-400); }
+        .progress-bar-fill.done {
+            width: 100% !important;
             animation: none;
-            background: linear-gradient(90deg, #22c55e, #4ade80);
+            background: var(--color-primary-600);
             transition: width 0.3s ease;
         }
-        .progress-bar-fill.error { 
-            width: 100% !important; 
+        .progress-bar-fill.error {
+            width: 100% !important;
             animation: none;
-            background: linear-gradient(90deg, #ef4444, #f87171);
+            background: var(--color-red-600);
             transition: width 0.3s ease;
         }
-        /* Overlay with strong cover */
+        /* Penutup kartu langkah yang belum aktif. */
         .step-overlay {
             z-index: 20;
-            background: rgba(249, 250, 251, 0.94) !important;
-            backdrop-filter: blur(4px);
+            background: rgba(255, 255, 255, 0.92);
         }
         .dark .step-overlay {
-            background: rgba(17, 24, 39, 0.94) !important;
+            background: rgba(24, 24, 27, 0.92);
         }
     </style>
 
     <div class="flex flex-col gap-8">
         
         <!-- TOP SECTION: UPLOAD FORM -->
-        <div class="bg-white dark:bg-gray-800 p-8 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Upload Source File</h1>
-            <p class="text-gray-500 dark:text-gray-400 mb-6">Unggah file sumber data secara berurutan. Periode Bulan & Tahun otomatis terdeteksi dari dokumen WTT.</p>
+        <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs p-6">
+            <h1 class="text-2xl font-semibold tracking-tight text-font-important-light dark:text-font-important-dark mb-2">Upload Source File</h1>
+            <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark mb-6">Unggah file sumber data secara berurutan. Periode Bulan & Tahun otomatis terdeteksi dari dokumen WTT.</p>
             
-            <div class="space-y-6">
+            <div class="flex flex-col gap-6">
                 <!-- Auto-Detection Status Banner -->
-                <div id="period-banner" class="bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 p-4 rounded-xl flex items-center justify-between transition-all duration-300">
+                <div id="period-banner" class="bg-base-50 dark:bg-base-800 border border-base-200 dark:border-base-700 p-4 rounded-default flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">auto_awesome</span>
+                        <span class="material-symbols-outlined text-primary-600 dark:text-primary-400 text-2xl">calendar_month</span>
                         <div>
-                            <span class="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Auto-Detect Periode</span>
-                            <p class="text-sm font-medium text-gray-900 dark:text-gray-100" id="period-status-text">
+                            <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark">Auto-Detect Periode</span>
+                            <p class="text-sm text-font-important-light dark:text-font-important-dark" id="period-status-text">
                                 Silakan upload file <strong>WTT (PDF)</strong> untuk memulai. Bulan & Tahun otomatis terdeteksi.
                             </p>
                         </div>
                     </div>
                     <div class="flex items-center gap-3 flex-wrap justify-end">
                         <div id="period-badge-container" class="hidden">
-                            <span id="detected-period-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700">
+                            <span id="detected-period-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-400">
                                 <span class="material-symbols-outlined text-xs">verified</span>
                                 <span id="detected-period-text">Juli 2026</span>
                             </span>
@@ -92,14 +91,14 @@
                              satu file (mis. GHP) bisa diganti tanpa membongkar dari WTT.
                              Menekan tombol ini sendiri TIDAK mengubah data apa pun. -->
                         <div class="flex items-center gap-2" id="reset-mode-control" title="Buka kembali kartu upload untuk bulan yang sudah ada, agar satu file bisa diganti">
-                            <select id="reset-project-select" class="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 focus:ring-2 focus:ring-[#006b32] focus:border-[#006b32]">
+                            <select id="reset-project-select" class="border border-base-200 bg-white font-medium min-w-20 rounded-default shadow-xs text-font-default-light text-sm focus:outline-2 focus:-outline-offset-2 focus:outline-primary-600 dark:bg-base-900 dark:border-base-700 dark:text-font-default-dark dark:scheme-dark px-3 py-2">
                                 <option value="">— pilih bulan —</option>
                                 {% for p in project_options %}
                                 <option value="{{ p.id }}" data-code="{{ p.code }}" data-period="{{ p.period_name }}">{{ p.period_name }} ({{ p.code }})</option>
                                 {% endfor %}
                             </select>
-                            <button type="button" id="btn-reset-mode" disabled class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-lg text-white shadow-sm hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;">
-                                <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                            <button type="button" id="btn-reset-mode" disabled class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span class="material-symbols-outlined text-lg">restart_alt</span>
                                 <span>Atur Ulang</span>
                             </button>
                         </div>
@@ -110,11 +109,11 @@
                 <div class="relative flex flex-col md:flex-row gap-6 md:gap-4 justify-between" id="stepper-container">
                     
                     <!-- Step 1: WTT (PDF) - Active by default -->
-                    <div class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-sm transition-all duration-300 relative overflow-hidden" id="step-1">
+                    <div class="flex-1 bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs p-5 relative overflow-hidden" id="step-1">
                         <div class="flex items-center gap-3 mb-4">
-                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center font-bold text-sm" id="step-1-badge">1</div>
-                            <h3 class="font-bold text-gray-900 dark:text-gray-100">WTT (PDF)</h3>
-                            <span class="ml-auto text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded dark:bg-red-900/30 dark:text-red-400">Mandatory</span>
+                            <div class="w-8 h-8 rounded-full bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 flex items-center justify-center font-semibold text-sm" id="step-1-badge">1</div>
+                            <h3 class="font-semibold text-font-important-light dark:text-font-important-dark">WTT (PDF)</h3>
+                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400">Mandatory</span>
                         </div>
                         
                         <form id="form-wtt" class="step-form">
@@ -122,45 +121,45 @@
                             <input type="hidden" name="file_type" value="WTT">
                             <input type="hidden" name="project_id" id="wtt-project-id" value="">
                             
-                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative cursor-pointer drop-zone">
+                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-base-300 dark:border-base-700 border-dashed rounded-default hover:border-primary-600 hover:bg-base-50 dark:hover:bg-base-800 transition-colors relative cursor-pointer drop-zone">
                                 <div class="space-y-1 text-center pointer-events-none">
-                                    <span class="material-symbols-outlined text-3xl text-gray-400 group-hover:text-primary-500">picture_as_pdf</span>
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                    <span class="material-symbols-outlined text-3xl text-base-400">picture_as_pdf</span>
+                                    <div class="text-sm text-font-default-light dark:text-font-default-dark">
                                         <span class="text-primary-600 font-medium">Select WTT file</span>
                                     </div>
-                                    <p class="text-xs text-gray-400">Mendeteksi bulan & baseline jadwal</p>
+                                    <p class="text-xs text-base-400">Mendeteksi bulan & baseline jadwal</p>
                                 </div>
                                 <input name="file" type="file" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer file-input" required>
                             </div>
-                            <div class="file-name-display mt-2 text-xs text-green-600 dark:text-green-400 font-medium hidden flex items-center gap-1">
-                                <span class="material-symbols-outlined text-[16px]">check_circle</span> <span class="file-name-text"></span>
+                            <div class="file-name-display mt-2 text-xs text-green-700 dark:text-green-400 font-medium hidden flex items-center gap-1">
+                                <span class="material-symbols-outlined text-base">check_circle</span> <span class="file-name-text"></span>
                             </div>
                             <!-- Progress Bar -->
                             <div class="progress-area mt-3 hidden">
                                 <div class="progress-bar-container">
                                     <div class="progress-bar-fill uploading"></div>
                                 </div>
-                                <p class="progress-label text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
+                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Uploading...</p>
                             </div>
                             <!-- Result Notification -->
                             <div class="result-notification mt-3 hidden"></div>
-                            <button type="submit" class="mt-4 w-full flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm hover:shadow-md hover:brightness-110 text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
-                                <span class="material-symbols-outlined text-[18px] btn-icon">cloud_upload</span> <span class="btn-text">Upload WTT</span>
+                            <button type="submit" class="mt-4 w-full font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed btn-upload" disabled>
+                                <span class="material-symbols-outlined text-lg btn-icon">cloud_upload</span> <span class="btn-text">Upload WTT</span>
                             </button>
                         </form>
                         
                         <!-- Overlay when disabled (hidden by default on step 1) -->
                         <div class="absolute inset-0 step-overlay flex items-center justify-center transition-opacity duration-300 hidden opacity-0 pointer-events-none">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Selesai</p>
+                            <p class="text-sm font-medium text-font-subtle-light dark:text-font-subtle-dark">Selesai</p>
                         </div>
                     </div>
 
                     <!-- Step 2: PPRP (PDF) - In the Middle -->
-                    <div class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-sm transition-all duration-300 relative overflow-hidden" id="step-2">
+                    <div class="flex-1 bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs p-5 relative overflow-hidden" id="step-2">
                         <div class="flex items-center gap-3 mb-4">
-                            <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 flex items-center justify-center font-bold text-sm" id="step-2-badge">2</div>
-                            <h3 class="font-bold text-gray-900 dark:text-gray-100">PPRP (PDF)</h3>
-                            <span class="ml-auto text-xs font-medium bg-gray-100 text-gray-700 px-2 py-1 rounded dark:bg-gray-700 dark:text-gray-300">Optional</span>
+                            <div class="w-8 h-8 rounded-full bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 flex items-center justify-center font-semibold text-sm" id="step-2-badge">2</div>
+                            <h3 class="font-semibold text-font-important-light dark:text-font-important-dark">PPRP (PDF)</h3>
+                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300">Optional</span>
                         </div>
                         
                         <form id="form-pprp" class="step-form">
@@ -168,50 +167,50 @@
                             <input type="hidden" name="file_type" value="PPRP">
                             <input type="hidden" name="project_id" id="pprp-project-id" value="">
                             
-                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative cursor-pointer drop-zone">
+                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-base-300 dark:border-base-700 border-dashed rounded-default hover:border-primary-600 hover:bg-base-50 dark:hover:bg-base-800 transition-colors relative cursor-pointer drop-zone">
                                 <div class="space-y-1 text-center pointer-events-none">
-                                    <span class="material-symbols-outlined text-3xl text-gray-400 group-hover:text-primary-500">picture_as_pdf</span>
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                    <span class="material-symbols-outlined text-3xl text-base-400">picture_as_pdf</span>
+                                    <div class="text-sm text-font-default-light dark:text-font-default-dark">
                                         <span class="text-primary-600 font-medium">Select PPRP file</span>
                                     </div>
-                                    <p class="text-xs text-gray-400">Surat perubahan jadwal</p>
+                                    <p class="text-xs text-base-400">Surat perubahan jadwal</p>
                                 </div>
                                 <input name="file" type="file" accept=".pdf" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer file-input" disabled>
                             </div>
-                            <div class="file-name-display mt-2 text-xs text-green-600 dark:text-green-400 font-medium hidden flex items-center gap-1">
-                                <span class="material-symbols-outlined text-[16px]">check_circle</span> <span class="file-name-text"></span>
+                            <div class="file-name-display mt-2 text-xs text-green-700 dark:text-green-400 font-medium hidden flex items-center gap-1">
+                                <span class="material-symbols-outlined text-base">check_circle</span> <span class="file-name-text"></span>
                             </div>
                             <!-- Progress Bar -->
                             <div class="progress-area mt-3 hidden">
                                 <div class="progress-bar-container">
                                     <div class="progress-bar-fill uploading"></div>
                                 </div>
-                                <p class="progress-label text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
+                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Uploading...</p>
                             </div>
                             <!-- Result Notification -->
                             <div class="result-notification mt-3 hidden"></div>
                             
                             <div class="mt-4 flex gap-3">
-                                <button type="submit" class="flex-1 flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm hover:shadow-md hover:brightness-110 text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
-                                    <span class="material-symbols-outlined text-[18px] btn-icon">cloud_upload</span> <span class="btn-text">Upload PPRP</span>
+                                <button type="submit" class="flex-1 font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed btn-upload" disabled>
+                                    <span class="material-symbols-outlined text-lg btn-icon">cloud_upload</span> <span class="btn-text">Upload PPRP</span>
                                 </button>
-                                <button type="button" id="btn-skip" class="flex-1 flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm hover:shadow-md text-sm font-bold rounded-lg bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-950/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer select-none" style="border: 1.5px solid #006b32; color: #006b32;" disabled>
-                                    <span>Skip</span> <span class="material-symbols-outlined text-[18px]">skip_next</span>
+                                <button type="button" id="btn-skip" class="flex-1 font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent hover:bg-base-100/80 dark:hover:bg-base-800/80 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <span>Skip</span> <span class="material-symbols-outlined text-lg">skip_next</span>
                                 </button>
                             </div>
                         </form>
                         
                         <div class="absolute inset-0 step-overlay flex items-center justify-center transition-opacity duration-300">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 text-center px-4">Upload WTT terlebih dahulu</p>
+                            <p class="text-sm font-medium text-font-subtle-light dark:text-font-subtle-dark text-center px-4">Upload WTT terlebih dahulu</p>
                         </div>
                     </div>
                     
                     <!-- Step 3: GHP (Excel) - On the Right -->
-                    <div class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 shadow-sm transition-all duration-300 relative overflow-hidden" id="step-3">
+                    <div class="flex-1 bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs p-5 relative overflow-hidden" id="step-3">
                         <div class="flex items-center gap-3 mb-4">
-                            <div class="w-8 h-8 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 flex items-center justify-center font-bold text-sm" id="step-3-badge">3</div>
-                            <h3 class="font-bold text-gray-900 dark:text-gray-100">GHP (Excel)</h3>
-                            <span class="ml-auto text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded dark:bg-red-900/30 dark:text-red-400">Mandatory</span>
+                            <div class="w-8 h-8 rounded-full bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 flex items-center justify-center font-semibold text-sm" id="step-3-badge">3</div>
+                            <h3 class="font-semibold text-font-important-light dark:text-font-important-dark">GHP (Excel)</h3>
+                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400">Mandatory</span>
                         </div>
                         
                         <form id="form-ghp" class="step-form">
@@ -219,47 +218,47 @@
                             <input type="hidden" name="file_type" value="GHP">
                             <input type="hidden" name="project_id" id="ghp-project-id" value="">
                             
-                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group relative cursor-pointer drop-zone">
+                            <div class="mt-1 flex justify-center px-4 pt-5 pb-6 border-2 border-base-300 dark:border-base-700 border-dashed rounded-default hover:border-primary-600 hover:bg-base-50 dark:hover:bg-base-800 transition-colors relative cursor-pointer drop-zone">
                                 <div class="space-y-1 text-center pointer-events-none">
-                                    <span class="material-symbols-outlined text-3xl text-gray-400 group-hover:text-primary-500">table_view</span>
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                    <span class="material-symbols-outlined text-3xl text-base-400">table_view</span>
+                                    <div class="text-sm text-font-default-light dark:text-font-default-dark">
                                         <span class="text-primary-600 font-medium">Select GHP file</span>
                                     </div>
-                                    <p class="text-xs text-gray-400">Realisasi operasional penerbangan</p>
+                                    <p class="text-xs text-base-400">Realisasi operasional penerbangan</p>
                                 </div>
                                 <input name="file" type="file" accept=".xlsx,.xls" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer file-input" required disabled>
                             </div>
-                            <div class="file-name-display mt-2 text-xs text-green-600 dark:text-green-400 font-medium hidden flex items-center gap-1">
-                                <span class="material-symbols-outlined text-[16px]">check_circle</span> <span class="file-name-text"></span>
+                            <div class="file-name-display mt-2 text-xs text-green-700 dark:text-green-400 font-medium hidden flex items-center gap-1">
+                                <span class="material-symbols-outlined text-base">check_circle</span> <span class="file-name-text"></span>
                             </div>
                             <!-- Progress Bar -->
                             <div class="progress-area mt-3 hidden">
                                 <div class="progress-bar-container">
                                     <div class="progress-bar-fill uploading"></div>
                                 </div>
-                                <p class="progress-label text-xs text-gray-500 dark:text-gray-400 mt-1">Uploading...</p>
+                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Uploading...</p>
                             </div>
                             <!-- Result Notification -->
                             <div class="result-notification mt-3 hidden"></div>
-                            <button type="submit" class="mt-4 w-full flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm hover:shadow-md hover:brightness-110 text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important;" disabled>
-                                <span class="material-symbols-outlined text-[18px] btn-icon">cloud_upload</span> <span class="btn-text">Upload GHP</span>
+                            <button type="submit" class="mt-4 w-full font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed btn-upload" disabled>
+                                <span class="material-symbols-outlined text-lg btn-icon">cloud_upload</span> <span class="btn-text">Upload GHP</span>
                             </button>
                         </form>
                         
                         <div class="absolute inset-0 step-overlay flex items-center justify-center transition-opacity duration-300">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 text-center px-4">Upload PPRP atau lewati terlebih dahulu</p>
+                            <p class="text-sm font-medium text-font-subtle-light dark:text-font-subtle-dark text-center px-4">Upload PPRP atau lewati terlebih dahulu</p>
                         </div>
                     </div>
                 </div>
                 
                 <!-- Overall Success Message -->
-                <div id="overall-success" class="hidden bg-green-50 border border-green-200 text-green-800 rounded-lg p-4 dark:bg-green-900/20 dark:border-green-800/50 dark:text-green-400 flex items-center gap-3">
+                <div id="overall-success" class="hidden rounded-default bg-green-50 border border-base-200 dark:bg-green-500/20 dark:border-base-800 text-green-700 dark:text-green-400 p-4 flex items-center gap-3">
                     <span class="material-symbols-outlined text-2xl">task_alt</span>
                     <div>
-                        <h4 class="font-bold">Proses Selesai!</h4>
+                        <h4 class="font-semibold">Proses Selesai!</h4>
                         <p class="text-sm">Seluruh berkas berhasil diproses ke database. Anda dapat melihat laporan atau me-reload halaman untuk memeriksa riwayat.</p>
                     </div>
-                    <button type="button" onclick="window.location.reload()" class="ml-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    <button type="button" onclick="window.location.reload()" class="ml-auto font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed">
                         Refresh Halaman
                     </button>
                 </div>
@@ -267,59 +266,59 @@
         </div>
 
         <!-- BOTTOM SECTION: TABLE VIEW (Upload History with Action Delete) -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden mt-8">
-            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs overflow-hidden">
+            <div class="px-6 py-4 border-b border-base-200 dark:border-base-800 flex justify-between items-center">
                 <div>
-                    <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Upload History</h2>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Riwayat file sumber data yang diunggah ke sistem.</p>
+                    <h2 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark">Upload History</h2>
+                    <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Riwayat file sumber data yang diunggah ke sistem.</p>
                 </div>
             </div>
             
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" id="history-table">
-                    <thead class="bg-gray-50 dark:bg-gray-900/50">
+                <table class="w-full" id="history-table">
+                    <thead class="bg-base-50 dark:bg-base-800">
                         <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">File Name</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Project</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Uploaded At</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Uploader</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">File Name</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Project</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Type</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Uploaded At</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Uploader</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Status</th>
+                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Action</th>
                         </tr>
                     </thead>
-                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" id="history-tbody">
+                    <tbody id="history-tbody">
                         {% for file in history %}
-                        <tr id="row-file-{{ file.id }}" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <tr id="row-file-{{ file.id }}" class="border-b border-base-200 dark:border-base-800 hover:bg-base-50 dark:hover:bg-base-800 transition-colors">
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate" title="{{ file.file_path }}">
+                                <div class="text-sm font-medium text-font-important-light dark:text-font-important-dark truncate" title="{{ file.file_path }}">
                                     {{ file.file_path|slice:"-35:" }}
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900 dark:text-gray-300 font-medium">{{ file.project.project_id }}</div>
+                                <div class="text-sm text-font-default-light dark:text-font-default-dark font-medium">{{ file.project.project_id }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                                    {% if file.file_type == 'WTT' %}bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300
-                                    {% elif file.file_type == 'PPRP' %}bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300
-                                    {% elif file.file_type == 'GHP' %}bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300
-                                    {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium 
+                                    {% if file.file_type == 'WTT' %}bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400
+                                    {% elif file.file_type == 'PPRP' %}bg-primary-50 text-primary-700 dark:bg-primary-500/20 dark:text-primary-300
+                                    {% elif file.file_type == 'GHP' %}bg-orange-50 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400
+                                    {% else %}bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300{% endif %}">
                                     {{ file.file_type }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-font-subtle-light dark:text-font-subtle-dark">
                                 {{ file.uploaded_at|date:"Y-m-d H:i" }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-font-subtle-light dark:text-font-subtle-dark">
                                 {{ file.uploaded_by.username }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                    {% if file.status == 'SUCCESS' %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
-                                    {% elif file.status == 'FAILED' %}bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300
-                                    {% elif file.status == 'PROCESSING' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300
-                                    {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium
+                                    {% if file.status == 'SUCCESS' %}bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-400
+                                    {% elif file.status == 'FAILED' %}bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400
+                                    {% elif file.status == 'PROCESSING' %}bg-orange-50 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400
+                                    {% else %}bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300{% endif %}">
                                     {{ file.status }}
                                 </span>
                                 {% if file.status == 'FAILED' %}
@@ -327,14 +326,14 @@
                                 {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                                <button type="button" onclick="openDeleteModal('{{ file.id }}', '{{ file.file_path|slice:"-30:" }}', '{{ file.file_type }}')" class="inline-flex items-center text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Hapus File & Bersihkan Data">
-                                    <span class="material-symbols-outlined text-[20px]">delete</span>
+                                <button type="button" onclick="openDeleteModal('{{ file.id }}', '{{ file.file_path|slice:"-30:" }}', '{{ file.file_type }}')" class="inline-flex items-center text-red-600 hover:text-red-700 dark:text-red-400 p-1.5 rounded-default hover:bg-red-50 dark:hover:bg-red-500/20 transition-colors" title="Hapus File & Bersihkan Data">
+                                    <span class="material-symbols-outlined text-xl">delete</span>
                                 </button>
                             </td>
                         </tr>
                         {% empty %}
                         <tr id="row-empty">
-                            <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                            <td colspan="7" class="px-6 py-10 text-center text-sm text-font-subtle-light dark:text-font-subtle-dark">
                                 Belum ada file yang diunggah.
                             </td>
                         </tr>
@@ -349,27 +348,27 @@
     {{ existing_files|json_script:"existing-files" }}
 
     <!-- MODAL KONFIRMASI GANTI FILE (mode Atur Ulang) -->
-    <div id="replace-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs hidden opacity-0 transition-opacity duration-200">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700 transform transition-all scale-95 duration-200" id="replace-modal-card">
+    <div id="replace-modal" class="fixed inset-0 z-50 flex items-center justify-center av-overlay hidden opacity-0 transition-opacity">
+        <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs av-modal-sm w-full p-6 transition-all" id="replace-modal-card">
             <div class="flex items-start gap-4">
-                <div class="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <div class="w-10 h-10 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400 flex items-center justify-center shrink-0">
                     <span class="material-symbols-outlined text-2xl">swap_horiz</span>
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100" id="replace-title"></h3>
-                    <dl class="mt-3 text-sm space-y-1.5">
-                        <div class="flex gap-2"><dt class="w-12 shrink-0 text-gray-500">Lama</dt><dd id="replace-old" class="font-mono text-gray-900 dark:text-gray-100 break-all"></dd></div>
-                        <div class="flex gap-2"><dt class="w-12 shrink-0 text-gray-500">Baru</dt><dd id="replace-new" class="font-mono text-gray-900 dark:text-gray-100 break-all"></dd></div>
+                    <h3 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark" id="replace-title"></h3>
+                    <dl class="mt-3 text-sm flex flex-col gap-1.5">
+                        <div class="flex gap-2"><dt class="w-10 shrink-0 text-base-500">Lama</dt><dd id="replace-old" class="font-mono text-font-important-light dark:text-font-important-dark"></dd></div>
+                        <div class="flex gap-2"><dt class="w-10 shrink-0 text-base-500">Baru</dt><dd id="replace-new" class="font-mono text-font-important-light dark:text-font-important-dark"></dd></div>
                     </dl>
-                    <p id="replace-hint" class="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-200"></p>
+                    <p id="replace-hint" class="mt-3 p-3 rounded-default bg-orange-50 border border-base-200 dark:bg-orange-500/20 dark:border-base-800 text-xs text-orange-700 dark:text-orange-400"></p>
                 </div>
             </div>
             <div class="mt-6 flex justify-end gap-3">
-                <button type="button" onclick="closeReplaceModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors">
+                <button type="button" onclick="closeReplaceModal()" class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent hover:bg-base-100/80 dark:hover:bg-base-800/80 disabled:opacity-50 disabled:cursor-not-allowed">
                     Batal
                 </button>
-                <button type="button" id="btn-confirm-replace" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm hover:brightness-110 transition-all" style="background-color: #006b32; color: #ffffff !important;">
-                    <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
+                <button type="button" id="btn-confirm-replace" class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span class="material-symbols-outlined text-lg">swap_horiz</span>
                     <span>Ya, Ganti</span>
                 </button>
             </div>
@@ -377,20 +376,20 @@
     </div>
 
     <!-- MODAL CONFIRMATION POPUP FOR DELETE -->
-    <div id="delete-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs hidden opacity-0 transition-opacity duration-200">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700 transform transition-all scale-95 duration-200" id="modal-card">
+    <div id="delete-modal" class="fixed inset-0 z-50 flex items-center justify-center av-overlay hidden opacity-0 transition-opacity">
+        <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs av-modal-sm w-full p-6 transition-all" id="modal-card">
             <div class="flex items-start gap-4">
-                <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                <div class="w-10 h-10 rounded-full bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400 flex items-center justify-center shrink-0">
                     <span class="material-symbols-outlined text-2xl">warning</span>
                 </div>
                 <div class="flex-1">
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Konfirmasi Hapus File</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                        Apakah Anda yakin ingin menghapus file <strong id="modal-filename" class="text-gray-900 dark:text-white"></strong> (<span id="modal-filetype" class="font-semibold text-primary-600"></span>)?
+                    <h3 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark">Konfirmasi Hapus File</h3>
+                    <p class="text-sm text-font-default-light dark:text-font-default-dark mt-1">
+                        Apakah Anda yakin ingin menghapus file <strong id="modal-filename" class="text-font-important-light dark:text-font-important-dark"></strong> (<span id="modal-filetype" class="font-semibold text-primary-600"></span>)?
                     </p>
-                    <div class="mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-xs text-red-700 dark:text-red-300 space-y-1">
+                    <div class="mt-3 p-3 rounded-default bg-red-50 border border-base-200 dark:bg-red-500/20 dark:border-base-800 text-xs text-red-700 dark:text-red-400 flex flex-col gap-1">
                         <p class="font-semibold flex items-center gap-1">
-                            <span class="material-symbols-outlined text-[15px]">info</span> Dampak Penghapusan:
+                            <span class="material-symbols-outlined text-sm">info</span> Dampak Penghapusan:
                         </p>
                         <p id="modal-cascade-hint">Seluruh data jadwal penerbangan yang dibuat dari file ini akan dibersihkan dari database.</p>
                     </div>
@@ -398,11 +397,11 @@
             </div>
             
             <div class="mt-6 flex justify-end gap-3">
-                <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors">
+                <button type="button" onclick="closeDeleteModal()" class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent hover:bg-base-100/80 dark:hover:bg-base-800/80 disabled:opacity-50 disabled:cursor-not-allowed">
                     Batal
                 </button>
-                <button type="button" id="btn-confirm-delete" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors">
-                    <span class="material-symbols-outlined text-[18px]">delete_forever</span>
+                <button type="button" id="btn-confirm-delete" class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-red-600 bg-red-600 text-white hover:bg-red-600/80">
+                    <span class="material-symbols-outlined text-lg">delete_forever</span>
                     <span id="btn-delete-text">Ya, Hapus Data</span>
                 </button>
             </div>
@@ -509,17 +508,17 @@
                 
                 if (type === 'success') {
                     notif.innerHTML = `
-                        <div class="flex items-start gap-2 p-3 rounded-lg bg-green-50 border border-green-200 dark:bg-green-900/20 dark:border-green-800/50">
-                            <span class="material-symbols-outlined text-green-600 dark:text-green-400 text-[18px] mt-0.5">check_circle</span>
-                            <p class="text-sm text-green-700 dark:text-green-300 font-medium">${message}</p>
+                        <div class="flex items-start gap-2 p-3 rounded-default bg-green-50 border border-base-200 dark:bg-green-500/20 dark:border-base-800">
+                            <span class="material-symbols-outlined text-green-700 dark:text-green-400 text-lg mt-0.5">check_circle</span>
+                            <p class="text-sm text-green-700 dark:text-green-400 font-medium">${message}</p>
                         </div>`;
                 } else {
                     notif.innerHTML = `
-                        <div class="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800/50">
-                            <span class="material-symbols-outlined text-red-600 dark:text-red-400 text-[18px] mt-0.5">error</span>
-                            <p class="text-sm text-red-700 dark:text-red-300 font-medium flex-1">${message}</p>
-                            <button type="button" onclick="this.closest('.result-notification').classList.add('hidden')" class="text-red-400 hover:text-red-600 dark:hover:text-red-300">
-                                <span class="material-symbols-outlined text-[16px]">close</span>
+                        <div class="flex items-start gap-2 p-3 rounded-default bg-red-50 border border-base-200 dark:bg-red-500/20 dark:border-base-800">
+                            <span class="material-symbols-outlined text-red-600 dark:text-red-400 text-lg mt-0.5">error</span>
+                            <p class="text-sm text-red-700 dark:text-red-400 font-medium flex-1">${message}</p>
+                            <button type="button" onclick="this.closest('.result-notification').classList.add('hidden')" class="text-red-600 hover:text-red-700 dark:text-red-400">
+                                <span class="material-symbols-outlined text-base">close</span>
                             </button>
                         </div>`;
                 }
@@ -533,18 +532,18 @@
             // + peringatan) supaya tidak ada file yang "hilang" tanpa laporan.
             function formatIngestResult(result) {
                 const iconFor = {
-                    processed: ['check_circle', 'text-green-600 dark:text-green-400'],
-                    skipped: ['remove_circle', 'text-gray-400'],
+                    processed: ['check_circle', 'text-green-700 dark:text-green-400'],
+                    skipped: ['remove_circle', 'text-base-400'],
                     failed: ['cancel', 'text-red-600 dark:text-red-400']
                 };
                 let html = `<p class="font-semibold">${escapeHtml(result.message || '')}</p>`;
                 if (result.files && result.files.length) {
-                    html += '<ul class="mt-1.5 space-y-1">';
+                    html += '<ul class="mt-1.5 flex flex-col gap-1">';
                     for (const f of result.files) {
                         const [icon, color] = iconFor[f.status] || iconFor.failed;
-                        html += `<li class="flex items-start gap-1.5 text-xs"><span class="material-symbols-outlined text-[15px] mt-px ${color}">${icon}</span><span><span class="font-mono">${escapeHtml(f.filename)}</span> — ${escapeHtml(f.message)}</span></li>`;
+                        html += `<li class="flex items-start gap-1.5 text-xs"><span class="material-symbols-outlined text-sm mt-px ${color}">${icon}</span><span><span class="font-mono">${escapeHtml(f.filename)}</span> — ${escapeHtml(f.message)}</span></li>`;
                         for (const w of (f.warnings || [])) {
-                            html += `<li class="ml-5 text-xs text-amber-700 dark:text-amber-300">⚠ ${escapeHtml(w)}</li>`;
+                            html += `<li class="ml-5 text-xs text-orange-700 dark:text-orange-400">⚠ ${escapeHtml(w)}</li>`;
                         }
                     }
                     html += '</ul>';
@@ -553,7 +552,7 @@
                     html += `<p class="mt-1.5 text-xs opacity-80">${result.resync.map(escapeHtml).join('<br>')}</p>`;
                 }
                 if (result.warnings && result.warnings.length) {
-                    html += `<div class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-200"><p class="font-semibold mb-1">Perlu diperiksa:</p><ul class="list-disc ml-4 space-y-0.5">${result.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`;
+                    html += `<div class="mt-2 p-2 rounded-default bg-orange-50 border border-base-200 dark:bg-orange-500/20 dark:border-base-800 text-xs text-orange-700 dark:text-orange-400"><p class="font-semibold mb-1">Perlu diperiksa:</p><ul class="ml-4 flex flex-col gap-1" style="list-style: disc">${result.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul></div>`;
                 }
                 return html;
             }
@@ -564,11 +563,11 @@
                 const ok = type === 'success';
                 notif.classList.remove('hidden');
                 notif.innerHTML = `
-                    <div class="flex items-start gap-2 p-3 rounded-lg ${ok ? 'bg-green-50 border border-green-200 dark:bg-green-900/20 dark:border-green-800/50' : 'bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800/50'}">
-                        <span class="material-symbols-outlined ${ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} text-[18px] mt-0.5">${ok ? 'check_circle' : 'error'}</span>
-                        <div class="text-sm ${ok ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'} flex-1 min-w-0">${html}</div>
-                        <button type="button" onclick="this.closest('.result-notification').classList.add('hidden')" class="${ok ? 'text-green-400 hover:text-green-600' : 'text-red-400 hover:text-red-600'}">
-                            <span class="material-symbols-outlined text-[16px]">close</span>
+                    <div class="flex items-start gap-2 p-3 rounded-lg ${ok ? 'rounded-default bg-green-50 border border-base-200 dark:bg-green-500/20 dark:border-base-800' : 'rounded-default bg-red-50 border border-base-200 dark:bg-red-500/20 dark:border-base-800'}">
+                        <span class="material-symbols-outlined ${ok ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'} text-lg mt-0.5">${ok ? 'check_circle' : 'error'}</span>
+                        <div class="text-sm ${ok ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'} flex-1 min-w-0">${html}</div>
+                        <button type="button" onclick="this.closest('.result-notification').classList.add('hidden')" class="${ok ? 'text-green-700 dark:text-green-400' : 'text-red-600 hover:text-red-700 dark:text-red-400'}">
+                            <span class="material-symbols-outlined text-base">close</span>
                         </button>
                     </div>`;
             }
@@ -629,7 +628,7 @@
 
                 // Show uploading progress
                 btn.disabled = true;
-                btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span> <span class="btn-text">Processing...</span>';
+                btn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">refresh</span> <span class="btn-text">Processing...</span>';
                 showProgress(stepObj, 'uploading');
 
                 const formData = new FormData(form);
@@ -675,7 +674,7 @@
                         rememberUploadedFiles(result);
                         
                         // AUTO-DISABLE THIS STEP CARD
-                        btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check_circle</span> <span class="btn-text">Completed</span>';
+                        btn.innerHTML = '<span class="material-symbols-outlined text-lg">check_circle</span> <span class="btn-text">Completed</span>';
                         btn.classList.remove('bg-blue-600', 'bg-purple-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-purple-700', 'hover:bg-orange-700');
                         btn.classList.add('bg-green-600', 'hover:bg-green-700');
                         btn.disabled = true;
@@ -769,15 +768,15 @@
                 
                 step.btn.disabled = true;
                 if (step.btnSkip) {
-                    step.btn.className = `flex-1 flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm hover:shadow-md hover:brightness-110 text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none`;
+                    step.btn.className = `flex-1 font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed btn-upload`;
                 } else {
-                    step.btn.className = `mt-4 w-full flex justify-center items-center gap-2 py-2.5 px-4 shadow-sm hover:shadow-md hover:brightness-110 text-sm font-bold rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all btn-upload cursor-pointer select-none`;
+                    step.btn.className = `mt-4 w-full font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed btn-upload`;
                 }
                 step.btn.style.backgroundColor = '#006b32';
                 step.btn.style.color = '#ffffff';
-                step.btn.innerHTML = `<span class="material-symbols-outlined text-[18px] btn-icon">cloud_upload</span> <span class="btn-text">${btnText}</span>`;
+                step.btn.innerHTML = `<span class="material-symbols-outlined text-lg btn-icon">cloud_upload</span> <span class="btn-text">${btnText}</span>`;
                 
-                step.badge.className = `w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300`;
+                step.badge.className = `w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300`;
                 step.badge.textContent = stepNumber;
                 
                 if (step.btnSkip) step.btnSkip.disabled = false;
