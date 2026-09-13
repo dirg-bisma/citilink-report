@@ -79,6 +79,12 @@ Tiga temuan teknis yang menjadi akar masalah:
   batang jumlah penerbangan abu-abu transparan, durasi delay merah, donat IATA & PPRP keluarga hijau + abu-abu,
   distribusi rute hijau. `Chart.defaults.color` abu-abu menengah agar terbaca di kedua tema.
 - JavaScript: **hanya nilai warna** yang diganti; fungsi, `id`, urutan render, dan panggilan API tidak berubah.
+- **Titik 100% pada grafik OTP harian tidak lagi terpotong.** Sumbu `yOTP` dikunci `min: 0, max: 100`, dan
+  Chart.js memotong gambar tepat di batas area grafik, sehingga titik dan garis bernilai 100% kehilangan
+  separuh atasnya (masalah lama, sudah ada sebelum perapian). Dataset `OTP Dep %` kini memakai
+  `clip: { left: 0, top: 6, right: 0, bottom: 0 }` — boleh menggambar 6px melewati batas atas, cukup untuk
+  `pointHoverRadius: 5`. Skala dan label sumbu tidak berubah. Diverifikasi dengan data asli Agustus 2026
+  (8 hari bernilai 100%): titik tampil utuh, dan lengkungan `tension: 0.2` tidak terlihat melampaui garis 100%.
 - **Border kartu dinaikkan** dari `border-base-200` ke `border-base-350` (21 tempat: kartu KPI, kartu chart,
   garis pemisah judul chart, garis bawah header, dropdown Project/Tgl) karena `base-200` (oklch 92.8%) terlalu
   samar di layar. Kelas `.border-base-350` **tidak ada** di CSS Unfold, jadi utilitasnya disediakan di

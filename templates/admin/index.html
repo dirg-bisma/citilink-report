@@ -248,7 +248,12 @@
                             pointHoverRadius: 5,
                             pointBackgroundColor: C_GREEN,
                             yAxisID: 'yOTP',
-                            tension: 0.2
+                            tension: 0.2,
+                            // Sumbu dikunci 0-100%, dan Chart.js memotong gambar tepat di batas area
+                            // grafik: titik dan garis di 100% kehilangan separuh atasnya. Izinkan
+                            // menggambar 6px melewati batas atas (cukup untuk pointHoverRadius 5)
+                            // tanpa mengubah skala maupun label sumbu.
+                            clip: { left: 0, top: 6, right: 0, bottom: 0 }
                         },
                         {
                             type: 'line',
