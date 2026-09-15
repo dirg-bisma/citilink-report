@@ -6,37 +6,10 @@ Jalankan:  python manage.py test tests.test_dashboard
 from datetime import date, time
 
 from django.contrib.auth.models import User
-from django.test import Client, TestCase
+from django.test import TestCase
 
 from core.analytics import otp_metric
 from core.models import Project, ScheduleVersion
-
-
-class ReportViewTests(TestCase):
-    """Tombol "Lihat Laporan": tahap 1 layar tunggu, tahap 2 (?data=1) laporan."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_user('tester', 'tester@example.com', 'x', is_staff=True, is_superuser=True)
-        cls.project = Project.objects.create(project_id='PRJ-202609', period='2026-09', year=2026, month=9,
-                                             created_by=cls.user)
-
-    def setUp(self):
-        self.client = Client()
-        self.client.force_login(self.user)
-
-    def test_loading_screen_then_report(self):
-        url = f'/admin/core/project/{self.project.id}/view-report/'
-
-        loading = self.client.get(url)
-        self.assertEqual(loading.status_code, 200)
-        self.assertContains(loading, 'Menyusun laporan realisasi')
-        self.assertContains(loading, "fetch('?data=1'")
-        self.assertNotContains(loading, 'Menghubungkan ke basis data')  # tahap palsu lama
-
-        report = self.client.get(url + '?data=1')
-        self.assertEqual(report.status_code, 200)
-        self.assertContains(report, 'REALISASI PENERBANGAN PENETAPAN PELAKSANAAN RUTE PENERBANGAN')
 
 
 class GroundTimeTests(TestCase):

@@ -2,7 +2,7 @@
 
 **Project:** CITILINK AVIOR
 **Date:** 2026-09-15
-**Status:** Selesai 2026-09-15, 7 commit lokal (belum push). Lanjutan `docs/ui-cleanup.md` (13 Sep).
+**Status:** Sedang dikerjakan. Lanjutan `docs/ui-cleanup.md` (13 Sep).
 **Aturan:** satu commit per nomor, `manage.py check` + tes terkait tiap nomor, suite penuh di akhir, tidak push sampai pemilik melihat hasilnya.
 
 ## Keputusan pemilik (15 Sep)
@@ -142,43 +142,3 @@ Project) sengaja tetap.
 - Verifikasi: `manage.py check` bersih; `test_both_upload_pages_render` lulus; di pratinjau, klik "Upload PPRP"
   membuka modal dengan kode project yang benar (PRJ-202608, id 124), klik "Detail" menyembunyikan tabel dan
   membuka kartu rincian (QG834).
-
-### No 3 — progress palsu (selesai)
-
-- **Modal Unduh Rekap** (`templates/admin/core/project/change_list.html`): bilah persen yang naik acak
-  (`Math.random()`, berhenti di 94%) dan ikon lingkaran dihapus. Kini: spinner `.av-spinner` + "Menyiapkan rekap
-  satu musim / File akan tersimpan otomatis setelah siap." + tombol Batal. `fetch` dengan `AbortController`,
-  pembacaan `Content-Disposition`, penyimpanan blob, dan penutupan otomatis tetap; status berubah menjadi
-  "Selesai, file tersimpan." sesaat sebelum modal ditutup. Variabel `downloadRekapInterval` dan elemen
-  `#download-rekap-progress-bar`/`#download-rekap-percentage` dibuang.
-- **Layar tunggu laporan** (`report_loading.html`): ikon pesawat meluncur, 4 titik tahap, skeleton berkedip, dan
-  teks tahap berbasis timer ("Menghubungkan ke basis data…" dst.) dihapus. Kini: spinner + "Menyusun laporan
-  realisasi…" + petunjuk. Alur tetap: `fetch('?data=1')`, ikuti redirect (sesi habis), ganti isi dokumen,
-  tampilan gagal + "Coba lagi" + "Buka langsung", `<noscript>`. Navbar/badge/tombol mengikuti gaya `report_view`.
-- Tes baru `ReportViewTests` di `tests/test_dashboard.py`: tahap 1 memuat layar tunggu (dan tidak lagi memuat teks
-  tahap palsu), `?data=1` memuat kop laporan.
-- Verifikasi: `manage.py check` bersih; `tests.test_dashboard` (5 tes) + `test_both_upload_pages_render` lulus;
-  pratinjau: layar tunggu → tampilan gagal + Coba lagi (fetch dipalsukan gagal); modal rekap → fetch palsu 2 detik
-  → status "Selesai, file tersimpan." → modal tertutup dan kunci klik dilepas; Batal saat menunggu → modal tertutup.
-
-## Ringkasan commit
-
-| No | Commit | Isi |
-|---|---|---|
-| 1 | `98e4f91` | kartu rincian penerbangan |
-| 5 | `04ea932` | halaman Upload Data |
-| 6 | `5e94c52` | paginasi |
-| 7 | `eedef9d` | label umum Indonesia |
-| 4 | `cfab664` | AGT/SGT "-" |
-| 2 | `ac69b8e` | tombol tabel di admin.py |
-| 3 | (lihat git log) | progress palsu → spinner |
-
-## Pertanyaan terbuka untuk pemilik
-
-1. Kartu rincian: pada flight OPERATED, ATD/ATA tampil `--:--` karena membaca `atd`/`ata` (WTT), bukan `ghp_atd`.
-   Tampilkan jam GHP?
-2. Judul kolom dari nama field model (Project id, Period, Year, Month, Created by, Created at, Flight date) →
-   perlu `verbose_name` + migrasi 0006. Lanjut?
-3. Teks bawaan admin (breadcrumb "Core › Projects", "Type to search", "Filters", "Change password") → coba
-   `LANGUAGE_CODE = 'id'`? Efek samping: format tanggal admin berubah.
-4. Kolom `period`/`year`/`month` di tabel Projects (sudah termuat di `project_id`) → sembunyikan?
