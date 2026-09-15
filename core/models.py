@@ -78,7 +78,8 @@ class ScheduleVersion(models.Model):
     
     # Operational flag (from GHP match)
     operational_flag = models.BooleanField(default=False)  # 1 or 0
-    delay_code = models.CharField(max_length=50, blank=True, null=True)
+    # Isi kolom 'Break Down' GHP apa adanya (tanpa spasi), mis. '00:04/63,00:19/80'.
+    delay_code = models.CharField(max_length=255, blank=True, null=True)
 
     # Jam dari GHP (Local) — khusus konsumsi dashboard/analytics.
     # Laporan final tidak boleh membaca kolom ini; atd/ata laporan bersumber WTT.

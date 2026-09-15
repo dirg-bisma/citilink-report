@@ -1,7 +1,7 @@
 """GHP Parser - extract operational data from Excel"""
 import pandas as pd
 import re
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 
 def detect_ghp_period(excel_path: str) -> int:
@@ -44,6 +44,29 @@ def detect_ghp_range(excel_path: str):
                 return (datetime.strptime(m.group(1), '%d/%m/%Y').date(),
                         datetime.strptime(m.group(2), '%d/%m/%Y').date())
     return None
+
+
+_BREAKDOWN_ITEM = re.compile(r'^(\d{1,3}):(\d{2})/([0-9A-Z]{1,3})$')
+
+
+def parse_delay_breakdown(text) -> List[Tuple[str, int]]:
+    """
+    Kolom 'Break Down' GHP -> daftar (kode, menit), urutan sesuai file.
+    '00:04/63,00:19/80' -> [('63', 4), ('80', 19)]. Teks kosong -> [].
+    Format tidak dikenal -> ValueError (pemanggil yang memutuskan nasibnya).
+    """
+    if text is None:
+        return []
+    clean = re.sub(r'\s+', '', str(text))
+    if not clean:
+        return []
+    items = []
+    for part in clean.split(','):
+        m = _BREAKDOWN_ITEM.match(part)
+        if not m:
+            raise ValueError(f"Format Break Down tidak dikenal: {text!r}")
+        items.append((m.group(3), int(m.group(1)) * 60 + int(m.group(2))))
+    return items
 
 
 def parse_ghp(excel_path: str, year: int = 2026) -> List[Dict]:
@@ -95,7 +118,21 @@ def parse_ghp(excel_path: str, year: int = 2026) -> List[Dict]:
         else:
             continue
         
-        for leg in legs:
+        # Kolom 14 'Break Down' (DURASI/KODE) milik keberangkatan dari stasiun
+        # tengah = flight TERAKHIR di baris; flight pertama (datang ke stasiun
+        # itu) tidak boleh ikut menerima kodenya. Format tidak dikenal tidak
+        # menggagalkan upload: kodenya dikosongkan dan teks mentahnya dibawa
+        # sebagai peringatan.
+        raw_breakdown = row[14] if len(row) > 14 and pd.notna(row[14]) else ''
+        delay_code, delay_code_invalid = '', ''
+        try:
+            if parse_delay_breakdown(raw_breakdown):
+                delay_code = re.sub(r'\s+', '', str(raw_breakdown))
+        except ValueError:
+            delay_code_invalid = str(raw_breakdown).strip()
+
+        for i, leg in enumerate(legs):
+            is_last = i == len(legs) - 1
             records.append({
                 'flight_number': leg['flight'],
                 'origin': leg['origin'],
@@ -104,7 +141,8 @@ def parse_ghp(excel_path: str, year: int = 2026) -> List[Dict]:
                 'std': str(std) if pd.notna(std) else '',
                 'atd': str(atd) if pd.notna(atd) else '',
                 'aircraft': str(aircraft) if pd.notna(aircraft) else '',
-                'delay_code': str(row[14]) if len(row) > 14 and pd.notna(row[14]) else '',
+                'delay_code': delay_code if is_last else '',
+                'delay_code_invalid': delay_code_invalid if is_last else '',
             })
     
     return records

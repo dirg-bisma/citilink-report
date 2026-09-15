@@ -1,6 +1,7 @@
 """Dashboard analytics - compute metrics from GHP & Schedule data (PowerBI Replica)"""
 from django.db.models import Count, Q, Sum
 from core.models import ScheduleVersion
+from core.parsers.ghp import parse_delay_breakdown
 from datetime import datetime, timedelta, time
 import re
 
@@ -11,25 +12,6 @@ def parse_flight_category(flight_number: str) -> str:
     if len(clean_no) >= 4 and clean_no[0] in ['8', '9']:
         return 'CHRT/XTRA'
     return 'REG'
-
-
-def map_iata_category(delay_code: str) -> str:
-    """Map delay code or description to 5 major IATA categories"""
-    if not delay_code:
-        return 'OTHERS'
-    
-    code_upper = str(delay_code).upper()
-    
-    if any(k in code_upper for k in ['LATARR', 'LATE ARRIVAL', '80', '81', '82', '83', '84', '93']):
-        return 'LATARR'
-    if any(k in code_upper for k in ['APT', 'GOVERNMENT', 'SECURITY', 'CUSTOMS', 'IMMIGRATION', 'RESTRICTIONS AT AIRPORT', '85', '86', '87', '88', '89']):
-        return 'APT GOVERNMENTAL'
-    if any(k in code_upper for k in ['FLT', 'CREW', 'PILOT', 'CABIN', 'DISPATCH', 'OPERATIONS', 'MAINTENANCE', 'TEC', '41', '42', '43', '44', '45', '51', '52', '61', '62']):
-        return 'FLT OPS & CREW'
-    if any(k in code_upper for k in ['STN', 'HANDLING', 'CARGO', 'BAGGAGE', 'BOARDING', 'LOADING', 'REFUELING', 'FUEL', 'RAMP', '11', '12', '13', '14', '15', '16', '17', '18', '31', '32', '33', '34']):
-        return 'STN HANDLING & CARGO'
-    
-    return 'OTHERS'
 
 
 def filter_flights(project_id: int, start_day: int = None, end_day: int = None):
@@ -184,72 +166,57 @@ def pprp_achievement(project_id: int, month: int, start_day: int = None, end_day
     }
 
 
+def _code_sort_key(code: str):
+    return (0, int(code), code) if code.isdigit() else (1, 0, code)
+
+
 def delay_factors(project_id: int, start_day: int = None, end_day: int = None) -> dict:
-    """Comprehensive delay breakdown with OTP-15 tolerance"""
-    flights = filter_flights(project_id, start_day, end_day)
+    """
+    Delay code dari kolom 'Break Down' GHP, apa adanya (tanpa pengelompokan
+    IATA). Yang dihitung: SEMUA flight berkode, berapa pun lama delay-nya —
+    sengaja tidak memakai batas OTP-15 (keputusan pemilik 2026-09-13).
 
-    delay_counts_map = {}
-    delay_durations = {}
-    iata_category_counts = {
-        'LATARR': 0,
-        'APT GOVERNMENTAL': 0,
-        'FLT OPS & CREW': 0,
-        'STN HANDLING & CARGO': 0,
-        'OTHERS': 0,
-    }
+    - case_counts: semua kode; count = jumlah flight (satu kode dihitung sekali
+      per flight, flight dengan 3 kode masuk ke 3 kode), minutes = menit dari
+      GHP. Urut flight turun -> menit turun -> kode.
+    - durations  : 10 kode dengan menit GHP terbanyak.
+    - total_flights: jumlah flight berkode.
+    """
+    flights = (filter_flights(project_id, start_day, end_day)
+               .exclude(delay_code__isnull=True).exclude(delay_code=''))
 
+    counts, minutes = {}, {}
+    total_flights = 0
     for f in flights:
-        # Jam GHP untuk dashboard; fallback kolom lama untuk data legacy.
-        g_std = f.ghp_std or f.std
-        g_atd = f.ghp_atd or f.atd
-        if g_std and g_atd:
-            std_m = g_std.hour * 60 + g_std.minute
-            atd_m = g_atd.hour * 60 + g_atd.minute
-            diff = atd_m - std_m
-            if diff < -720: diff += 1440
-            elif diff > 720: diff -= 1440
+        try:
+            items = parse_delay_breakdown(f.delay_code)
+        except ValueError:
+            continue  # kode rusak di DB tidak boleh menjatuhkan dashboard
+        if not items:
+            continue
+        per_flight = {}
+        for code, mins in items:
+            per_flight[code] = per_flight.get(code, 0) + mins
+        total_flights += 1
+        for code, mins in per_flight.items():
+            counts[code] = counts.get(code, 0) + 1
+            minutes[code] = minutes.get(code, 0) + mins
 
-            if diff > 15:  # Delayed > 15 mins (OTP-15 standard)
-                if f.delay_code and f.delay_code.strip():
-                    code = f.delay_code.strip()
-                    cat = map_iata_category(code)
-                else:
-                    code = 'UNASSIGNED'
-                    cat = 'OTHERS'
+    by_frequency = sorted(counts, key=lambda c: (-counts[c], -minutes[c], _code_sort_key(c)))
+    case_counts = [{'code': c, 'count': counts[c], 'minutes': minutes[c]} for c in by_frequency]
 
-                delay_counts_map[code] = delay_counts_map.get(code, 0) + 1
-                delay_durations[code] = delay_durations.get(code, 0) + diff
-                iata_category_counts[cat] += 1
-
-    # Format Top Case Counts
-    sorted_cases = sorted(delay_counts_map.items(), key=lambda x: x[1], reverse=True)[:10]
-    case_counts = [{'code': code, 'count': count} for code, count in sorted_cases]
-
-    # Format Top Durations
-    duration_list = []
-    sorted_durations = sorted(delay_durations.items(), key=lambda x: x[1], reverse=True)[:10]
-    for code, total_min in sorted_durations:
-        hrs = total_min // 60
-        mins = total_min % 60
-        duration_list.append({
-            'code': code,
-            'minutes': total_min,
-            'duration_str': f"{hrs:02d}:{mins:02d}",
-        })
-
-    # Format IATA Categories
-    total_iata = sum(iata_category_counts.values())
-    iata_donut = []
-    if total_iata > 0:
-        for cat, cnt in iata_category_counts.items():
-            if cnt > 0:
-                pct = round((cnt / total_iata) * 100, 2)
-                iata_donut.append({'category': cat, 'count': cnt, 'percentage': pct})
+    by_minutes = sorted(counts, key=lambda c: (-minutes[c], -counts[c], _code_sort_key(c)))[:10]
+    durations = [{
+        'code': c,
+        'minutes': minutes[c],
+        'count': counts[c],
+        'duration_str': f"{minutes[c] // 60:02d}:{minutes[c] % 60:02d}",
+    } for c in by_minutes]
 
     return {
         'case_counts': case_counts,
-        'durations': duration_list,
-        'iata_categories': iata_donut,
+        'durations': durations,
+        'total_flights': total_flights,
     }
 
 

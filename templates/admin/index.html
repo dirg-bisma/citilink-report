@@ -135,10 +135,11 @@
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">Kategori Delay Breakdown (IATA Standard)</h2>
+                    <h2 class="font-semibold text-[15px] text-important">Delay Code Terbanyak</h2>
+                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark" id="delayCodeCaption">-</span>
                 </div>
-                <div class="chart-box" id="iataDonutContainer">
-                    <canvas id="iataDonutChart"></canvas>
+                <div class="chart-box" id="delayCodeContainer">
+                    <canvas id="delayCodeChart"></canvas>
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
@@ -171,7 +172,7 @@
 
         let dailyTrendInstance = null;
         let delayDurationInstance = null;
-        let iataDonutInstance = null;
+        let delayCodeInstance = null;
         let pprpAchievementInstance = null;
         let routeDistInstance = null;
 
@@ -321,7 +322,7 @@
                 if (!empty) {
                     empty = document.createElement('div');
                     empty.className = 'empty-placeholder';
-                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">schedule</span><p class="text-xs">Data durasi delay belum tersedia.</p>';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">schedule</span><p class="text-xs">Belum ada delay code pada GHP periode ini.</p>';
                     container.appendChild(empty);
                 }
                 return;
@@ -331,9 +332,11 @@
             if (empty) empty.remove();
             canvas.style.display = 'block';
 
-            const labels = durations.map(d => d.code);
+            // Menit per kode diambil dari kolom Break Down GHP, bukan dari ATD-STD.
+            const labels = durations.map(d => `Kode ${d.code}`);
             const minutes = durations.map(d => d.minutes);
             const durationStrings = durations.map(d => d.duration_str);
+            const flightCounts = durations.map(d => d.count);
 
             const ctx = canvas.getContext('2d');
             delayDurationInstance = new Chart(ctx, {
@@ -357,7 +360,8 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return ` Durasi: ${durationStrings[context.dataIndex]} (HH:MM)`;
+                                    const i = context.dataIndex;
+                                    return ` Durasi: ${durationStrings[i]} (HH:MM) — ${flightCounts[i]} flight`;
                                 }
                             }
                         }
@@ -370,23 +374,29 @@
             });
         }
 
-        // 3. IATA Donut Chart
-        function renderIataDonutChart(categories) {
-            const container = document.getElementById('iataDonutContainer');
-            const canvas = document.getElementById('iataDonutChart');
+        // 3. Delay Code Donut Chart — frekuensi delay code GHP apa adanya (tanpa kategori IATA)
+        const DELAY_CODE_TOP = 9;
+        // Peringkat 1 paling gelap; warna mengikuti urutan peringkat, "Lainnya" abu-abu.
+        const DELAY_CODE_PALETTE = ['#006b32', '#1d7d45', '#358f58', '#4faa79', '#6cb98e',
+                                    '#8ac8a4', '#a6d6ba', '#b8dfc7', '#cfe9d9'];
 
-            if (iataDonutInstance) {
-                iataDonutInstance.destroy();
-                iataDonutInstance = null;
+        function renderDelayCodeChart(caseCounts, totalFlights) {
+            const container = document.getElementById('delayCodeContainer');
+            const canvas = document.getElementById('delayCodeChart');
+            document.getElementById('delayCodeCaption').textContent = `${(totalFlights || 0).toLocaleString()} flight berkode`;
+
+            if (delayCodeInstance) {
+                delayCodeInstance.destroy();
+                delayCodeInstance = null;
             }
 
-            if (!categories || categories.length === 0) {
+            if (!caseCounts || caseCounts.length === 0) {
                 canvas.style.display = 'none';
                 let empty = container.querySelector('.empty-placeholder');
                 if (!empty) {
                     empty = document.createElement('div');
                     empty.className = 'empty-placeholder';
-                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">pie_chart</span><p class="text-xs">Kategori IATA belum tersedia.</p>';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">pie_chart</span><p class="text-xs">Belum ada delay code pada GHP periode ini.</p>';
                     container.appendChild(empty);
                 }
                 return;
@@ -396,18 +406,26 @@
             if (empty) empty.remove();
             canvas.style.display = 'block';
 
-            const labels = categories.map(c => c.category);
-            const pcts = categories.map(c => c.percentage);
-            const palette = [C_GREEN, C_GREEN_2, C_GREEN_3, C_GRAY, C_GRAY_2];
+            const top = caseCounts.slice(0, DELAY_CODE_TOP);
+            const rest = caseCounts.slice(DELAY_CODE_TOP);
+            const slices = top.map(c => ({ label: `Kode ${c.code}`, count: c.count, tip: `${c.count} flight` }));
+            if (rest.length > 0) {
+                const restCount = rest.reduce((sum, c) => sum + c.count, 0);
+                slices.push({ label: 'Lainnya', count: restCount,
+                              tip: `${rest.length} kode (${rest.map(c => c.code).join(', ')}), ${restCount} kemunculan` });
+            }
+            const colors = slices.map((s, i) => i < top.length ? DELAY_CODE_PALETTE[i] : C_GRAY);
+            // Satu flight bisa punya beberapa kode, jadi persen = porsi dari total kemunculan kode.
+            const totalOccurrences = slices.reduce((sum, s) => sum + s.count, 0);
 
             const ctx = canvas.getContext('2d');
-            iataDonutInstance = new Chart(ctx, {
+            delayCodeInstance = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: labels,
+                    labels: slices.map(s => s.label),
                     datasets: [{
-                        data: pcts,
-                        backgroundColor: palette,
+                        data: slices.map(s => s.count),
+                        backgroundColor: colors,
                         borderWidth: 0,
                         hoverOffset: 6
                     }]
@@ -420,7 +438,10 @@
                         legend: { position: 'right', labels: { font: { size: 11, weight: '600' }, usePointStyle: true, boxWidth: 8 } },
                         tooltip: {
                             callbacks: {
-                                label: ctx => ` ${ctx.label}: ${ctx.parsed}%`
+                                label: c => {
+                                    const pct = (c.parsed / totalOccurrences * 100).toFixed(1);
+                                    return ` ${slices[c.dataIndex].tip} (${pct}%)`;
+                                }
                             }
                         }
                     }
@@ -581,7 +602,7 @@
                     updateKPIs(data);
                     renderDailyTrendChart(data.daily_trend);
                     renderDelayDurationChart(data.delay_data.durations);
-                    renderIataDonutChart(data.delay_data.iata_categories);
+                    renderDelayCodeChart(data.delay_data.case_counts, data.delay_data.total_flights);
                     renderPprpChart(data.pprp);
                     renderRouteDistChart(data.flight_dist);
                 })

@@ -75,7 +75,7 @@ def delete_source_file(source_file_id: int) -> dict:
         elif file_type == 'GHP':
             # Reset operational flag + jam GHP for all schedules in this project
             affected_count = ScheduleVersion.objects.filter(project=project, operational_flag=True).update(
-                operational_flag=False, ghp_std=None, ghp_atd=None)
+                operational_flag=False, ghp_std=None, ghp_atd=None, delay_code=None)
             projects.append(project)
             source_file.delete()
 
@@ -377,6 +377,9 @@ class GhpMatchResult:
     # tidak punya jadwal WTT/PPRP. Ini bukti pesawat terbang yang akan
     # TERBUANG dari laporan bila tidak ditindaklanjuti (kasus QG356, QG719).
     unmatched: dict = field(default_factory=dict)
+    # (flight_number, tanggal ISO, teks mentah) untuk keberangkatan SUB yang
+    # kolom Break Down-nya tidak bisa dibaca; delay code-nya dikosongkan.
+    invalid_delay_codes: list = field(default_factory=list)
 
     @property
     def unmatched_rows(self) -> int:
@@ -384,12 +387,16 @@ class GhpMatchResult:
 
     def warnings(self) -> list:
         """Satu kalimat peringatan per flight yang tidak ketemu jadwalnya,
-        yang paling banyak harinya di urutan teratas."""
+        yang paling banyak harinya di urutan teratas; lalu satu kalimat per
+        delay code yang tidak terbaca."""
         out = []
         for fn, dates in sorted(self.unmatched.items(), key=lambda kv: (-len(kv[1]), kv[0])):
             span = _fmt_date_id(dates[0]) if len(dates) == 1 else f"{_fmt_date_id(dates[0])} s/d {_fmt_date_id(dates[-1])}"
             out.append(f"{fn}: {len(dates)} hari tercatat terbang di GHP tapi tidak ada jadwalnya ({span}). "
                        f"Cek apakah WTT/surat PPRP-nya belum diupload.")
+        for fn, d, raw in sorted(self.invalid_delay_codes, key=lambda x: (x[1], x[0])):
+            out.append(f"{fn} {_fmt_date_id(d)}: delay code GHP \"{raw}\" tidak bisa dibaca "
+                       f"(format yang dikenal: 00:05/89,00:10/80), jadi tidak dihitung di dashboard.")
         return out
 
 
@@ -413,6 +420,10 @@ def process_ghp(project_id: int, ghp_file_id: int) -> GhpMatchResult:
             if is_charter_flight(rec['flight_number']):
                 result.charter_skipped += 1
                 continue
+
+            if rec.get('delay_code_invalid') and rec.get('origin') == 'SUB':
+                result.invalid_delay_codes.append(
+                    (rec['flight_number'], rec['flight_date'], rec['delay_code_invalid']))
 
             # Match key: flight_num + date, prioritize active version
             schedule = ScheduleVersion.objects.filter(
@@ -447,8 +458,9 @@ def process_ghp(project_id: int, ghp_file_id: int) -> GhpMatchResult:
                 parsed_atd = parse_time_str(rec['atd'])
                 if parsed_atd:
                     schedule.ghp_atd = parsed_atd
-            if 'delay_code' in rec and rec['delay_code']:
-                schedule.delay_code = rec['delay_code']
+            # Selalu ditimpa (juga dengan kosong) supaya pencocokan ulang tidak
+            # meninggalkan kode dari GHP sebelumnya.
+            schedule.delay_code = rec.get('delay_code') or None
             schedule.save()
             result.matched += 1
 

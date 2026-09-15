@@ -171,7 +171,7 @@ def global_dashboard_api(request):
     # Compute analytics
     otp_data = {'total': 0, 'reg_count': 0, 'chrt_count': 0, 'on_time': 0, 'delayed': 0, 'otp_percent': 0, 'otp_arr_percent': 0, 'avg_agt': '1:45', 'avg_sgt': '1:30'}
     pprp_data = {'achievement': 0, 'total': 0, 'on_time': 0}
-    delay_data = {'case_counts': [], 'durations': [], 'iata_categories': []}
+    delay_data = {'case_counts': [], 'durations': [], 'total_flights': 0}
     daily_trend = []
     flight_dist = {'reg_count': 0, 'reg_pct': 0, 'chrt_count': 0, 'chrt_pct': 0, 'top_routes': []}
 
