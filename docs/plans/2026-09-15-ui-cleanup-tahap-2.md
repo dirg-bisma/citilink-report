@@ -2,7 +2,8 @@
 
 **Project:** CITILINK AVIOR
 **Date:** 2026-09-15
-**Status:** Sedang dikerjakan. Lanjutan `docs/ui-cleanup.md` (13 Sep).
+**Status:** Selesai 2026-09-15; No 3 dan bagian tombol No 2 **dibatalkan** atas permintaan pemilik (lihat §Dibatalkan).
+Lanjutan `docs/ui-cleanup.md` (13 Sep).
 **Aturan:** satu commit per nomor, `manage.py check` + tes terkait tiap nomor, suite penuh di akhir, tidak push sampai pemilik melihat hasilnya.
 
 ## Keputusan pemilik (15 Sep)
@@ -142,3 +143,18 @@ Project) sengaja tetap.
 - Verifikasi: `manage.py check` bersih; `test_both_upload_pages_render` lulus; di pratinjau, klik "Upload PPRP"
   membuka modal dengan kode project yang benar (PRJ-202608, id 124), klik "Detail" menyembunyikan tabel dan
   membuka kartu rincian (QG834).
+
+## Dibatalkan (15 Sep malam, permintaan pemilik: "kembalikan semua")
+
+Pemilik melihat hasilnya di aplikasi dan kurang puas: modal Unduh Rekap tanpa persentase/bilah, dan tombol
+"Upload PPRP" / "Lihat Laporan" versi Unfold dinilai jelek.
+
+- **No 3 dibatalkan penuh** lewat `git revert 1b82fd8` (`8d9ea36`): modal Unduh Rekap kembali memakai bilah + persen
+  simulasi, `report_loading.html` kembali memakai pesawat meluncur + tahap berbasis timer, `ReportViewTests` ikut
+  terhapus.
+- **No 2 dibatalkan sebagian**: tiga tombol baris (`pprp_action`, `view_report_action`, `detail_action`) di
+  `core/admin.py` dikembalikan persis ke markup lama (hijau solid, `#006b32` inline, `hover:brightness-110`,
+  `active:scale-95`); `ROW_BUTTON_CLASSES` dihapus. Yang **tetap** dari No 2: `→` di kolom Rute/Jadwal, `(v1)` memakai
+  token Unfold, label OPERATED hijau / UNVERIFIED merah.
+- Konsekuensi: aturan "jangan tulis `#006b32` di template" (`ui-cleanup.md` §6) punya pengecualian yang disengaja
+  di ketiga tombol ini; ada komentar di `admin.py`.

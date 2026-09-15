@@ -34,16 +34,9 @@ from django.http import JsonResponse
 from core.report import get_project_report_data, generate_report, generate_rekap_report, INDONESIAN_MONTHS
 
 
-# Tombol kecil di baris tabel: varian default unfold/components/button.html
-# dengan padding lebih rapat. Jangan tulis #006b32 / efek hover di sini
-# (lihat docs/ui-cleanup.md §6).
-ROW_BUTTON_CLASSES = (
-    'font-medium inline-flex items-center gap-1 rounded-default whitespace-nowrap cursor-pointer '
-    'px-2.5 py-1.5 text-xs border border-base-200 bg-white shadow-xs text-important '
-    'dark:border-base-700 dark:bg-transparent hover:bg-base-100/80 dark:hover:bg-base-800/80'
-)
-
-
+# Tombol baris tabel (Upload PPRP / Lihat Laporan / Detail) sengaja dibiarkan
+# bergaya lama (hijau solid, #006b32 inline) atas permintaan pemilik 2026-09-15;
+# versi kelas Unfold sempat dicoba dan dinilai jelek.
 @admin.register(Project)
 class ProjectAdmin(ModelAdmin):
     list_display = ['project_id', 'period', 'year', 'month', 'created_by', 'created_at', 'pprp_action', 'view_report_action']
@@ -53,18 +46,23 @@ class ProjectAdmin(ModelAdmin):
     @display(description="Upload PPRP")
     def pprp_action(self, obj):
         return format_html(
-            '<button type="button" onclick="openPprpModal({}, \'{}\')" class="{}" title="Upload surat PPRP untuk project ini">'
-            '<span class="material-symbols-outlined text-base">upload_file</span>Upload PPRP</button>',
-            obj.pk, obj.project_id, ROW_BUTTON_CLASSES,
+            '<button type="button" onclick="openPprpModal({}, \'{}\')" class="inline-flex items-center justify-center gap-1.5 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important; text-decoration: none;" title="Upload dokumen surat izin PPRP untuk project ini">'
+            '<span class="material-symbols-outlined text-[17px] text-white">cloud_upload</span>'
+            '<span>Upload PPRP</span>'
+            '</button>',
+            obj.pk,
+            obj.project_id
         )
 
     @display(description="Laporan")
     def view_report_action(self, obj):
         url = f"/admin/core/project/{obj.pk}/view-report/"
         return format_html(
-            '<a href="{}" target="_blank" class="{}" title="Buka laporan realisasi di tab baru">'
-            '<span class="material-symbols-outlined text-base">open_in_new</span>Lihat Laporan</a>',
-            url, ROW_BUTTON_CLASSES,
+            '<a href="{}" target="_blank" class="inline-flex items-center justify-center gap-1.5 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important; text-decoration: none;" title="Buka tampilan laporan realisasi di tab baru">'
+            '<span class="material-symbols-outlined text-[17px] text-white">visibility</span>'
+            '<span>Lihat Laporan</span>'
+            '</a>',
+            url
         )
         
     def get_urls(self):
@@ -303,8 +301,10 @@ class ScheduleVersionAdmin(ModelAdmin):
     @display(description="Aksi")
     def detail_action(self, obj):
         return format_html(
-            '<button type="button" onclick="openScheduleDetail({})" class="{}" title="Lihat rincian verifikasi">Detail</button>',
-            obj.pk, ROW_BUTTON_CLASSES,
+            '<button type="button" onclick="openScheduleDetailModal({})" class="inline-flex items-center justify-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md bg-green-50 text-[#006b32] dark:bg-green-950/30 dark:text-green-400 border border-green-200 dark:border-green-800 hover:bg-[#006b32] hover:text-white dark:hover:bg-[#006b32] dark:hover:text-white shadow-2xs transition-all cursor-pointer" title="Lihat rincian lengkap verifikasi data">'
+            '<span class="material-symbols-outlined text-[15px]">info</span> Detail'
+            '</button>',
+            obj.pk
         )
 
     def get_urls(self):
