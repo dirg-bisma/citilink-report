@@ -1,80 +1,49 @@
 {% load custom_tags i18n %}
-
+{% comment %}
+    Paginasi changelist: "Menampilkan a - b dari N data" + tombol « ‹ 1 2 3 4 › ».
+    Kelas tombol mengikuti unfold/components/button.html (varian default dan primary)
+    supaya ikut tema terang/gelap; kelas text-gray-* tidak ada di CSS Unfold.
+{% endcomment %}
 {% get_page_info cl as pinfo %}
 
 <div class="flex flex-col sm:flex-row items-center justify-between gap-4 w-full py-2">
-    <!-- Left: Data Count Info -->
-    <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium">
+    <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">
         {% if pinfo.result_count > 0 %}
-            {% blocktranslate with start=pinfo.start_index end=pinfo.end_index count=pinfo.result_count total=pinfo.full_result_count %}
-                Menampilkan <span class="font-bold text-gray-900 dark:text-gray-100">{{ start }} - {{ end }}</span> dari <span class="font-bold text-gray-900 dark:text-gray-100">{{ count }}</span> data
-            {% endblocktranslate %}
-            <span class="text-gray-400 dark:text-gray-500 mx-1">|</span>
-            <span class="text-gray-500 dark:text-gray-400">Total Query: <span class="font-semibold text-gray-800 dark:text-gray-200">{{ pinfo.full_result_count }}</span></span>
+            Menampilkan <span class="font-medium text-font-important-light dark:text-font-important-dark">{{ pinfo.start_index }}&ndash;{{ pinfo.end_index }}</span>
+            dari <span class="font-medium text-font-important-light dark:text-font-important-dark">{{ pinfo.result_count }}</span> data
+            {% if pinfo.is_filtered %}<span class="ml-1">(tersaring dari {{ pinfo.full_result_count }})</span>{% endif %}
         {% else %}
-            <span class="text-gray-500 dark:text-gray-400">0 data ditemukan</span>
+            Tidak ada data
         {% endif %}
     </div>
 
-    <!-- Right: Pagination Buttons (First, Prev, 4 Numbers, Next, Last) -->
     {% if pinfo.num_pages > 1 %}
+        {% with btn="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap px-3 py-2 text-sm border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent" %}
         <div class="inline-flex items-center gap-1.5 flex-wrap">
-            <!-- First Button -->
             {% if pinfo.has_previous %}
-                <a href="{{ pinfo.first_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Pertama">
-                    « First
-                </a>
+                <a href="{{ pinfo.first_url }}" class="{{ btn }} cursor-pointer hover:bg-base-100/80 dark:hover:bg-base-800/80" title="Halaman pertama">&laquo;</a>
+                <a href="{{ pinfo.prev_url }}" class="{{ btn }} cursor-pointer hover:bg-base-100/80 dark:hover:bg-base-800/80" title="Halaman sebelumnya">&lsaquo;</a>
             {% else %}
-                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
-                    « First
-                </span>
+                <span class="{{ btn }} opacity-50 cursor-not-allowed select-none">&laquo;</span>
+                <span class="{{ btn }} opacity-50 cursor-not-allowed select-none">&lsaquo;</span>
             {% endif %}
 
-            <!-- Prev Button -->
-            {% if pinfo.has_previous %}
-                <a href="{{ pinfo.prev_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Sebelumnya">
-                    ‹ Prev
-                </a>
-            {% else %}
-                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
-                    ‹ Prev
-                </span>
-            {% endif %}
-
-            <!-- 4 Numbers Only -->
             {% for p in pinfo.page_numbers %}
                 {% if p.is_current %}
-                    <span class="inline-flex items-center justify-center min-w-[32px] px-2.5 py-1.5 text-xs font-bold text-white bg-primary-600 rounded dark:bg-primary-500 shadow-xs ring-1 ring-primary-600 select-none">
-                        {{ p.number }}
-                    </span>
+                    <span class="font-medium inline-flex items-center rounded-default justify-center whitespace-nowrap px-3 py-2 text-sm border border-transparent bg-primary-600 text-white select-none">{{ p.number }}</span>
                 {% else %}
-                    <a href="{{ p.url }}" class="inline-flex items-center justify-center min-w-[32px] px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs">
-                        {{ p.number }}
-                    </a>
+                    <a href="{{ p.url }}" class="{{ btn }} cursor-pointer hover:bg-base-100/80 dark:hover:bg-base-800/80">{{ p.number }}</a>
                 {% endif %}
             {% endfor %}
 
-            <!-- Next Button -->
             {% if pinfo.has_next %}
-                <a href="{{ pinfo.next_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Berikutnya">
-                    Next ›
-                </a>
+                <a href="{{ pinfo.next_url }}" class="{{ btn }} cursor-pointer hover:bg-base-100/80 dark:hover:bg-base-800/80" title="Halaman berikutnya">&rsaquo;</a>
+                <a href="{{ pinfo.last_url }}" class="{{ btn }} cursor-pointer hover:bg-base-100/80 dark:hover:bg-base-800/80" title="Halaman terakhir">&raquo;</a>
             {% else %}
-                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
-                    Next ›
-                </span>
-            {% endif %}
-
-            <!-- Last Button -->
-            {% if pinfo.has_next %}
-                <a href="{{ pinfo.last_url }}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 transition-colors shadow-xs" title="Halaman Terakhir">
-                    Last »
-                </a>
-            {% else %}
-                <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100/70 border border-gray-200 rounded cursor-not-allowed dark:bg-gray-900/40 dark:text-gray-600 dark:border-gray-800 select-none">
-                    Last »
-                </span>
+                <span class="{{ btn }} opacity-50 cursor-not-allowed select-none">&rsaquo;</span>
+                <span class="{{ btn }} opacity-50 cursor-not-allowed select-none">&raquo;</span>
             {% endif %}
         </div>
+        {% endwith %}
     {% endif %}
 </div>

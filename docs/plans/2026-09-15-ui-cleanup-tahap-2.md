@@ -72,3 +72,16 @@ Aman dulu (hanya teks/kelas), yang menyentuh logika di akhir.
   CSS Unfold; sebelumnya `bg-green-100`/`dark:bg-green-900/30` yang tidak ada).
 - Verifikasi: `manage.py check` bersih; `tests.test_ingest.UploadEndpointsTests` (4 tes) lulus; pratinjau statis
   menampilkan badge "Wajib/Opsional/Wajib", nama file utuh di riwayat, `onclick` modal hapus membawa nama file utuh.
+
+### No 6 — paginasi (selesai)
+
+- `templates/unfold/helpers/pagination_default.html` ditulis ulang. "Total Query: N" dihapus (nilainya sama
+  dengan "dari N data"); bila hasil tersaring, ditampilkan "(tersaring dari N)".
+- Tombol First/Prev/Next/Last → « ‹ › » dengan `title` Indonesia (label bahasa untuk paginasi ikut selesai di sini,
+  tidak diulang di No 7).
+- Semua kelas `text-gray-*`/`bg-gray-*`/`border-gray-*`/`ring-*`/`min-w-[32px]` (tidak ada di CSS Unfold, mode gelap
+  rusak) → kelas tombol Unfold varian default/primary + token `text-font-*`. Keberadaan tiap kelas dicek dengan
+  `grep -F` di `styles.css` (catatan: cek `grep -c "\.dark\\:…"` di `ui-cleanup.md` §6 harus memakai `-F` atau
+  backslash ganda, kalau tidak selalu 0).
+- Verifikasi: `manage.py check` bersih; `test_both_upload_pages_render` lulus; pratinjau Flight Schedules
+  (6543 baris, 131 halaman) menampilkan "Menampilkan 1–50 dari 6543 data" dan « ‹ 1 2 3 4 › » dengan gaya tombol Unfold.
