@@ -24,22 +24,13 @@
         .dark .stitch-label {
             color: var(--color-font-subtle-dark);
         }
-        .stitch-stamp {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            padding: 0.3rem 0.85rem;
-            border: 1px solid var(--color-red-600);
-            border-radius: var(--border-radius, 6px);
-            background-color: var(--color-red-50);
-            color: var(--color-red-600);
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .dark .stitch-stamp {
-            background-color: rgba(220, 38, 38, 0.15);
-            border-color: var(--color-red-500);
-            color: var(--color-red-400);
+        /* Titik status pada badge ACTIVE/INACTIVE (w-1.5 tidak ada di CSS Unfold). */
+        .stitch-dot {
+            display: inline-block;
+            width: 0.375rem;
+            height: 0.375rem;
+            border-radius: 9999px;
+            background-color: currentColor;
         }
         /* Jarak antar seksi (pengganti space-y-6 yang tidak ada di CSS Unfold). */
         #dt-content > div + div {
@@ -51,20 +42,14 @@
     <div id="schedule-detail-view" class="hidden w-full mt-2 mb-8 transition-all duration-200">
         <div class="bg-white dark:bg-base-900 rounded-default shadow-xs border border-base-200 dark:border-base-800 w-full overflow-hidden" id="schedule-detail-card">
             
-            <!-- 1. Header Bar with Back Button & Tutup Button -->
+            <!-- 1. Header -->
             <div class="px-6 py-4 border-b border-base-200 dark:border-base-800 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <button type="button" onclick="closeScheduleDetail()" class="w-9 h-9 flex items-center justify-center rounded-default hover:bg-base-100 dark:hover:bg-base-800 text-base-700 dark:text-base-300 transition-colors cursor-pointer" title="Kembali ke Tabel Jadwal">
-                        <span class="material-symbols-outlined text-2xl">arrow_back</span>
-                    </button>
-                    <div>
-                        <h2 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark">Rincian Informasi Penerbangan</h2>
-                        <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark">Detail log operasional dan rekonsiliasi jadwal</p>
-                    </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark">Rincian Informasi Penerbangan</h2>
+                    <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark">Detail log operasional dan rekonsiliasi jadwal</p>
                 </div>
-                <button type="button" onclick="closeScheduleDetail()" class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80">
-                    <span class="material-symbols-outlined text-base">close</span>
-                    <span>Tutup Formulir</span>
+                <button type="button" onclick="closeScheduleDetail()" class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent hover:bg-base-100/80 dark:hover:bg-base-800/80" title="Kembali ke tabel jadwal">
+                    Tutup
                 </button>
             </div>
 
@@ -79,8 +64,7 @@
                 
                 <!-- Seksi 1: informasi dasar penerbangan -->
                 <div>
-                    <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark mb-3 flex items-center gap-2">
-                        <span class="material-symbols-outlined text-lg text-primary-600">flight_takeoff</span>
+                    <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark mb-3">
                         1. Informasi dasar penerbangan
                     </div>
 
@@ -98,7 +82,7 @@
                             <span class="stitch-label">Status keaktifan</span>
                             <div>
                                 <span id="st-status-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-400">
-                                    <span class="h-1.5 rounded-full style="width:0.375rem" bg-green-600"></span> ACTIVE (Jadwal Aktif)
+                                    <span class="stitch-dot"></span> ACTIVE (Jadwal Aktif)
                                 </span>
                             </div>
                         </div>
@@ -108,25 +92,15 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div class="stitch-card">
                             <span class="stitch-label">Rute keberangkatan → tujuan</span>
-                            <div class="text-base font-semibold text-font-important-light dark:text-font-important-dark flex items-center gap-2" id="st-route">
-                                <span>SUB (Surabaya)</span>
-                                <span class="material-symbols-outlined text-base text-base-400">arrow_forward</span>
-                                <span>BPN</span>
-                            </div>
+                            <div class="text-base font-semibold text-font-important-light dark:text-font-important-dark" id="st-route">--</div>
                         </div>
                         <div class="stitch-card">
                             <span class="stitch-label">Tanggal penerbangan</span>
-                            <div class="text-sm font-medium text-font-important-light dark:text-font-important-dark flex items-center gap-2" id="st-flight-date">
-                                <span class="material-symbols-outlined text-base text-base-400">calendar_today</span>
-                                <span>--</span>
-                            </div>
+                            <div class="text-sm font-medium text-font-important-light dark:text-font-important-dark" id="st-flight-date">--</div>
                         </div>
                         <div class="stitch-card">
-                            <span class="stitch-label">Tanggal create (waktu input)</span>
-                            <div class="text-sm font-medium text-font-important-light dark:text-font-important-dark flex items-center gap-2" id="st-created-at">
-                                <span class="material-symbols-outlined text-base text-base-400">history_toggle_off</span>
-                                <span>--</span>
-                            </div>
+                            <span class="stitch-label">Waktu input</span>
+                            <div class="text-sm font-medium text-font-important-light dark:text-font-important-dark" id="st-created-at">--</div>
                         </div>
                     </div>
                 </div>
@@ -134,8 +108,7 @@
                 <!-- Seksi 2: komparasi waktu penerbangan (UTC) -->
                 <div>
                     <div class="flex items-center justify-between mb-3">
-                        <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark flex items-center gap-2">
-                            <span class="material-symbols-outlined text-lg text-primary-600">schedule</span>
+                        <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark">
                             2. Komparasi waktu penerbangan (UTC)
                         </div>
                         <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark">Format waktu 24 jam</span>
@@ -144,8 +117,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <!-- Left Card: Jadwal Rencana -->
                         <div class="stitch-card !p-0 overflow-hidden">
-                            <div class="px-4 py-2.5 border-b border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-800 flex items-center gap-2">
-                                <span class="material-symbols-outlined text-base text-base-600 dark:text-base-300">event_note</span>
+                            <div class="px-4 py-2.5 border-b border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-800">
                                 <span class="text-xs font-medium text-font-default-light dark:text-font-default-dark">Jadwal rencana (time schedule)</span>
                             </div>
                             <div class="p-4 grid grid-cols-2 gap-4">
@@ -169,21 +141,11 @@
                         <!-- Right Card: Realisasi Terbang -->
                         <div class="stitch-card !p-0 overflow-hidden relative" id="st-actual-card">
                             <div class="px-4 py-2.5 border-b border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-800 flex items-center justify-between">
-                                <div class="flex items-center gap-2">
-                                    <span class="material-symbols-outlined text-base text-base-600 dark:text-base-300" id="st-actual-icon">flight_land</span>
-                                    <span class="text-xs font-medium text-font-default-light dark:text-font-default-dark">Realisasi terbang (GHP actual)</span>
-                                </div>
+                                <span class="text-xs font-medium text-font-default-light dark:text-font-default-dark">Realisasi terbang (GHP actual)</span>
                                 <span id="st-actual-badge" class="px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400">NO OPS</span>
                             </div>
-                            
-                            <!-- Stamp overlay for No Ops -->
-                            <div class="p-4 grid grid-cols-2 gap-4 relative">
-                                <div id="st-stamp-container" class="absolute inset-0 flex items-center justify-center pointer-events-none z-10 hidden">
-                                    <div class="stitch-stamp">
-                                        <span class="material-symbols-outlined text-sm">warning</span>
-                                        NO OPS DETECTED
-                                    </div>
-                                </div>
+
+                            <div class="p-4 grid grid-cols-2 gap-4">
                                 <div>
                                     <span class="stitch-label">ATD (actual dept)</span>
                                     <div class="text-xl font-semibold font-mono tabular-nums text-base-400 dark:text-base-500 flex items-center gap-1.5" id="st-atd">
@@ -205,8 +167,7 @@
 
                 <!-- Seksi 3: dasar izin rute & dokumen sumber -->
                 <div>
-                    <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark mb-3 flex items-center gap-2">
-                        <span class="material-symbols-outlined text-lg text-primary-600">folder_open</span>
+                    <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark mb-3">
                         3. Dasar izin rute & dokumen sumber
                     </div>
 
@@ -225,58 +186,37 @@
                         </div>
                         <div class="stitch-card">
                             <span class="stitch-label">File dokumen jadwal sumber</span>
-                            <div class="text-xs font-medium text-font-default-light dark:text-font-default-dark flex items-center gap-1.5 truncate" id="st-source-schedule" title="">
-                                <span class="material-symbols-outlined text-base text-base-400">picture_as_pdf</span>
-                                <span class="truncate">--</span>
-                            </div>
+                            <div class="text-xs font-medium font-mono text-font-default-light dark:text-font-default-dark truncate" id="st-source-schedule" title="">--</div>
                         </div>
                         <div class="stitch-card">
                             <span class="stitch-label">File log realisasi (GHP FLOPS)</span>
-                            <div class="text-xs font-medium text-font-default-light dark:text-font-default-dark flex items-center gap-1.5 truncate" id="st-source-ghp" title="">
-                                <span class="material-symbols-outlined text-base text-base-400">table_chart</span>
-                                <span class="truncate">--</span>
-                            </div>
+                            <div class="text-xs font-medium font-mono text-font-default-light dark:text-font-default-dark truncate" id="st-source-ghp" title="">--</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Seksi 4: hasil verifikasi operasional (GHP) -->
                 <div class="flex flex-col gap-3">
-                    <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark flex items-center gap-2">
-                        <span class="material-symbols-outlined text-lg text-primary-600">fact_check</span>
+                    <div class="text-sm font-semibold text-font-important-light dark:text-font-important-dark">
                         4. Hasil verifikasi operasional (GHP)
                     </div>
 
                     <!-- Status Box -->
                     <div id="st-status-box" class="p-4 rounded-default border flex flex-col gap-1 bg-red-50 border-base-200 dark:bg-red-500/20 dark:border-base-800">
-                        <span class="text-xs text-red-700 dark:text-red-400" id="st-ops-label">Status operasional (nilai di matriks laporan)</span>
-                        <div class="text-sm font-semibold flex items-center gap-2 text-red-700 dark:text-red-400" id="st-ops-title">
-                            <span class="material-symbols-outlined text-lg" id="st-ops-icon">warning</span>
-                            <span id="st-ops-text">TIDAK BEROPERASI (UNVERIFIED) — NILAI 0 DI FORM LAPORAN</span>
+                        <span class="text-xs text-red-700 dark:text-red-400" id="st-ops-label">Status operasional</span>
+                        <div class="text-sm font-semibold text-red-700 dark:text-red-400" id="st-ops-title">
+                            <span id="st-ops-text">Tidak beroperasi — nilai 0 di laporan</span>
                         </div>
                     </div>
 
-                    <!-- Keterangan Box (Italic Quote Style) -->
                     <div class="stitch-card">
-                        <span class="stitch-label">Keterangan / alasan sistem</span>
-                        <div class="bg-base-50 dark:bg-base-800 border-l-2 border-base-300 dark:border-base-700 p-3 rounded-r text-xs text-font-default-light dark:text-font-default-dark italic leading-relaxed" id="st-ops-desc">
-                            "Penerbangan tidak ditemukan pada data GHP yang diunggah (Batal / Tidak Beroperasi / No Ops)"
+                        <span class="stitch-label">Keterangan</span>
+                        <div class="text-xs text-font-default-light dark:text-font-default-dark leading-relaxed" id="st-ops-desc">
+                            Penerbangan tidak ditemukan pada data GHP yang diunggah (Batal / Tidak Beroperasi / No Ops)
                         </div>
                     </div>
                 </div>
 
-            </div>
-
-            <!-- 3. Footer Bar -->
-            <div class="px-6 py-3 bg-base-50 dark:bg-base-800 border-t border-base-200 dark:border-base-800 flex items-center justify-between text-xs text-font-subtle-light dark:text-font-subtle-dark">
-                <div class="flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-sm">verified_user</span>
-                    <span>Data Resmi Tersinkronisasi Dengan Master Database</span>
-                </div>
-                <div class="flex items-center gap-1">
-                    <span>Waktu Input: </span>
-                    <span class="text-font-default-light dark:text-font-default-dark font-mono font-medium" id="st-footer-created-at">--</span>
-                </div>
             </div>
 
         </div>
@@ -315,40 +255,27 @@
                         const statusBadge = document.getElementById('st-status-badge');
                         if (d.is_active) {
                             statusBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-400';
-                            statusBadge.innerHTML = '<span class="h-1.5 rounded-full style="width:0.375rem" bg-green-600"></span> ACTIVE (Jadwal Aktif)';
+                            statusBadge.innerHTML = '<span class="stitch-dot"></span> ACTIVE (Jadwal Aktif)';
                         } else {
                             statusBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400';
-                            statusBadge.innerHTML = '<span class="h-1.5 rounded-full style="width:0.375rem" bg-red-600"></span> INACTIVE (Digantikan PPRP)';
+                            statusBadge.innerHTML = '<span class="stitch-dot"></span> INACTIVE (Digantikan PPRP)';
                         }
 
-                        document.getElementById('st-route').innerHTML = `
-                            <span>${d.origin} (Surabaya)</span>
-                            <span class="material-symbols-outlined text-base text-base-400">arrow_forward</span>
-                            <span>${d.destination}</span>
-                        `;
-                        document.getElementById('st-flight-date').innerHTML = `
-                            <span class="material-symbols-outlined text-base text-base-400">calendar_today</span>
-                            <span>${d.flight_date}</span>
-                        `;
-                        document.getElementById('st-created-at').innerHTML = `
-                            <span class="material-symbols-outlined text-base text-base-400">history_toggle_off</span>
-                            <span>${d.created_at || '-'}</span>
-                        `;
-                        document.getElementById('st-footer-created-at').textContent = d.created_at || '-';
+                        document.getElementById('st-route').textContent = `${d.origin} → ${d.destination}`;
+                        document.getElementById('st-flight-date').textContent = d.flight_date;
+                        document.getElementById('st-created-at').textContent = d.created_at || '-';
 
                         // 2. Komparasi Waktu (UTC)
                         document.getElementById('st-std').innerHTML = `<span>${d.std}</span> <span class="text-xs font-sans font-medium text-base-500">UTC</span>`;
                         document.getElementById('st-sta').innerHTML = `<span>${d.sta}</span> <span class="text-xs font-sans font-medium text-base-500">UTC</span>`;
 
                         const actualBadge = document.getElementById('st-actual-badge');
-                        const stampContainer = document.getElementById('st-stamp-container');
                         const atdEl = document.getElementById('st-atd');
                         const ataEl = document.getElementById('st-ata');
 
                         if (d.operational_flag) {
                             actualBadge.className = 'px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-400';
                             actualBadge.textContent = 'OPERATED';
-                            stampContainer.classList.add('hidden');
                             atdEl.className = 'text-xl font-semibold font-mono tabular-nums text-primary-600 dark:text-primary-400 flex items-center gap-1.5';
                             atdEl.innerHTML = `<span>${d.atd}</span> <span class="text-xs font-sans font-medium text-base-500">UTC</span>`;
                             ataEl.className = 'text-xl font-semibold font-mono tabular-nums text-primary-600 dark:text-primary-400 flex items-center gap-1.5';
@@ -356,7 +283,6 @@
                         } else {
                             actualBadge.className = 'px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400';
                             actualBadge.textContent = 'NO OPS';
-                            stampContainer.classList.remove('hidden');
                             atdEl.className = 'text-xl font-semibold font-mono tabular-nums text-base-400 dark:text-base-500 flex items-center gap-1.5';
                             atdEl.innerHTML = `<span>--:--</span> <span class="text-xs font-sans font-normal text-base-400">(No Ops)</span>`;
                             ataEl.className = 'text-xl font-semibold font-mono tabular-nums text-base-400 dark:text-base-500 flex items-center gap-1.5';
@@ -368,41 +294,31 @@
                         document.getElementById('st-pprp-date').textContent = d.pprp_date;
                         
                         const scheduleSource = d.version_number === 1 ? `WTT: ${d.source_wtt}` : `PPRP: ${d.source_pprp}`;
-                        document.getElementById('st-source-schedule').innerHTML = `
-                            <span class="material-symbols-outlined text-base text-base-400">picture_as_pdf</span>
-                            <span class="truncate">${scheduleSource}</span>
-                        `;
+                        document.getElementById('st-source-schedule').textContent = scheduleSource;
                         document.getElementById('st-source-schedule').title = scheduleSource;
-
-                        document.getElementById('st-source-ghp').innerHTML = `
-                            <span class="material-symbols-outlined text-base text-base-400">table_chart</span>
-                            <span class="truncate">GHP: ${d.source_ghp}</span>
-                        `;
+                        document.getElementById('st-source-ghp').textContent = `GHP: ${d.source_ghp}`;
                         document.getElementById('st-source-ghp').title = d.source_ghp;
 
                         // 4. Hasil Verifikasi Operasional (GHP)
                         const statusBox = document.getElementById('st-status-box');
                         const opsLabel = document.getElementById('st-ops-label');
                         const opsTitle = document.getElementById('st-ops-title');
-                        const opsIcon = document.getElementById('st-ops-icon');
                         const opsText = document.getElementById('st-ops-text');
                         const opsDesc = document.getElementById('st-ops-desc');
 
                         if (d.operational_flag) {
                             statusBox.className = 'p-4 rounded-default border flex flex-col gap-1 bg-green-50 border-base-200 dark:bg-green-500/20 dark:border-base-800';
                             opsLabel.className = 'text-xs text-green-700 dark:text-green-400';
-                            opsTitle.className = 'text-sm font-semibold flex items-center gap-2 text-green-700 dark:text-green-400';
-                            opsIcon.textContent = 'check_circle';
-                            opsText.textContent = 'TERKONFIRMASI BEROPERASI (OPERATED) — NILAI 1 DI FORM LAPORAN';
+                            opsTitle.className = 'text-sm font-semibold text-green-700 dark:text-green-400';
+                            opsText.textContent = 'Beroperasi — nilai 1 di laporan';
                         } else {
                             statusBox.className = 'p-4 rounded-default border flex flex-col gap-1 bg-red-50 border-base-200 dark:bg-red-500/20 dark:border-base-800';
                             opsLabel.className = 'text-xs text-red-700 dark:text-red-400';
-                            opsTitle.className = 'text-sm font-semibold flex items-center gap-2 text-red-700 dark:text-red-400';
-                            opsIcon.textContent = 'warning';
-                            opsText.textContent = 'TIDAK BEROPERASI (UNVERIFIED) — NILAI 0 DI FORM LAPORAN';
+                            opsTitle.className = 'text-sm font-semibold text-red-700 dark:text-red-400';
+                            opsText.textContent = 'Tidak beroperasi — nilai 0 di laporan';
                         }
 
-                        opsDesc.textContent = `"${d.ops_status_desc}"`;
+                        opsDesc.textContent = d.ops_status_desc;
 
                         loadingArea.classList.add('hidden');
                         contentArea.classList.remove('hidden');
