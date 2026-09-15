@@ -43,8 +43,8 @@ def otp_metric(project_id: int, start_day: int = None, end_day: int = None) -> d
             'delayed': 0,
             'otp_percent': 0,
             'otp_arr_percent': 0,
-            'avg_agt': '0:00',
-            'avg_sgt': '0:00',
+            'avg_agt': '-',
+            'avg_sgt': '-',
         }
     
     delayed_dep = 0
@@ -121,8 +121,10 @@ def otp_metric(project_id: int, start_day: int = None, end_day: int = None) -> d
         avg_agt_str = f"{avg_agt_m // 60}:{avg_agt_m % 60:02d}"
         avg_sgt_str = f"{avg_sgt_m // 60}:{avg_sgt_m % 60:02d}"
     else:
-        avg_agt_str = "1:45"
-        avg_sgt_str = "1:30"
+        # Tidak ada pasangan ATA/ATD yang valid: tampilkan "-", bukan angka
+        # karangan — kartu KPI ini dibaca manajemen sebagai data sungguhan.
+        avg_agt_str = "-"
+        avg_sgt_str = "-"
 
     return {
         'total': total,

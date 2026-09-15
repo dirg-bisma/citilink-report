@@ -114,3 +114,12 @@ Project) sengaja tetap.
      Cara paling murah: `LANGUAGE_CODE = 'id'` (Django punya terjemahan Indonesia; Unfold tidak membawa folder
      `locale`, jadi sebagian teks Unfold tetap Inggris). Efek samping: format tanggal admin berubah
      ("Aug. 4, 2026" → "4 Agustus 2026"); laporan Excel tidak terpengaruh (pakai nama bulan sendiri).
+
+### No 4 — AGT/SGT tanpa angka karangan (selesai)
+
+- `core/analytics.py` `otp_metric`: bila tidak ada pasangan ATA/ATD valid, `avg_agt`/`avg_sgt` = "-" (sebelumnya
+  "1:45"/"1:30" — angka tetap yang tampil seolah data). Kasus tanpa flight sama sekali juga "-" (sebelumnya "0:00").
+- `core/views.py`: nilai default `otp_data` mengikuti ("-").
+- Tes baru `tests/test_dashboard.py` (3 tes): tanpa ATA → "-", tanpa flight → "-", data lengkap → AGT 1:45 / SGT 1:30
+  dihitung sungguhan.
+- Verifikasi: `manage.py check` bersih; `tests.test_dashboard` + `tests.test_delay_code` (18 tes) lulus.
