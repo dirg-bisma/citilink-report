@@ -57,3 +57,18 @@ Aman dulu (hanya teks/kelas), yang menyentuh logika di akhir.
   keadaan tampil benar di mode gelap.
 - Ditemukan, tidak diubah (di luar cakupan): pada flight OPERATED, ATD/ATA tampil `--:--` karena kartu membaca
   `atd`/`ata` (WTT) padahal yang terisi `ghp_atd`. Perlu keputusan pemilik: kartu ini menampilkan jam GHP atau WTT?
+
+### No 5 — Upload Data (selesai)
+
+- Badge langkah: "Mandatory" merah → "Wajib" abu-abu; "Optional" → "Opsional".
+- Badge tipe file di riwayat: WTT biru / PPRP hijau / GHP oranye → satu badge abu-abu (`bg-base-100`).
+- "Proses Selesai!" → "Proses selesai"; "Refresh Halaman" → "Muat Ulang"; label progres "Selesai!"/"Gagal!" →
+  tanpa tanda seru; tombol usai upload "Completed" → "Selesai".
+- Nama file di riwayat: `file_path|slice:"-35:"` (35 karakter terakhir dari path, bisa terpotong di tengah nama)
+  → filter baru `basename` di `core/templatetags/custom_tags.py`; nama juga dipakai modal hapus (`escapejs`).
+- JS: parameter warna mati (`'bg-blue-600'`, `'bg-purple-600'`, `'bg-orange-600'`) dan `classList.remove(...)`
+  untuk kelas yang sudah tidak ada dibuang; `step.btn.style.backgroundColor = '#006b32'` dibuang (tombol sudah
+  `bg-primary-600`). Badge nomor langkah setelah sukses memakai `bg-green-50 text-green-700` (kelas yang ada di
+  CSS Unfold; sebelumnya `bg-green-100`/`dark:bg-green-900/30` yang tidak ada).
+- Verifikasi: `manage.py check` bersih; `tests.test_ingest.UploadEndpointsTests` (4 tes) lulus; pratinjau statis
+  menampilkan badge "Wajib/Opsional/Wajib", nama file utuh di riwayat, `onclick` modal hapus membawa nama file utuh.

@@ -1,8 +1,16 @@
+import os
+
 from django import template
 from django.contrib.auth.models import Group
 from django.contrib.admin.views.main import PAGE_VAR
 
 register = template.Library()
+
+
+@register.filter
+def basename(path):
+    """'media/uploads/ghp2026-09-02.xls' -> 'ghp2026-09-02.xls'."""
+    return os.path.basename(str(path or ''))
 
 
 @register.simple_tag

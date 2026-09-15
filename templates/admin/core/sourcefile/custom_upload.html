@@ -1,5 +1,5 @@
 {% extends 'unfold/layouts/base.html' %}
-{% load i18n unfold %}
+{% load i18n unfold custom_tags %}
 
 {% block title %}
     {% trans 'Upload Data' %} | {{ site_title|default:_('Django site admin') }}
@@ -113,7 +113,7 @@
                         <div class="flex items-center gap-3 mb-4">
                             <div class="w-8 h-8 rounded-full bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 flex items-center justify-center font-semibold text-sm" id="step-1-badge">1</div>
                             <h3 class="font-semibold text-font-important-light dark:text-font-important-dark">WTT (PDF)</h3>
-                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400">Mandatory</span>
+                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300">Wajib</span>
                         </div>
                         
                         <form id="form-wtt" class="step-form">
@@ -159,7 +159,7 @@
                         <div class="flex items-center gap-3 mb-4">
                             <div class="w-8 h-8 rounded-full bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 flex items-center justify-center font-semibold text-sm" id="step-2-badge">2</div>
                             <h3 class="font-semibold text-font-important-light dark:text-font-important-dark">PPRP (PDF)</h3>
-                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300">Optional</span>
+                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300">Opsional</span>
                         </div>
                         
                         <form id="form-pprp" class="step-form">
@@ -210,7 +210,7 @@
                         <div class="flex items-center gap-3 mb-4">
                             <div class="w-8 h-8 rounded-full bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 flex items-center justify-center font-semibold text-sm" id="step-3-badge">3</div>
                             <h3 class="font-semibold text-font-important-light dark:text-font-important-dark">GHP (Excel)</h3>
-                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-400">Mandatory</span>
+                            <span class="ml-auto text-xs font-medium px-2 py-1 rounded bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300">Wajib</span>
                         </div>
                         
                         <form id="form-ghp" class="step-form">
@@ -255,11 +255,11 @@
                 <div id="overall-success" class="hidden rounded-default bg-green-50 border border-base-200 dark:bg-green-500/20 dark:border-base-800 text-green-700 dark:text-green-400 p-4 flex items-center gap-3">
                     <span class="material-symbols-outlined text-2xl">task_alt</span>
                     <div>
-                        <h4 class="font-semibold">Proses Selesai!</h4>
-                        <p class="text-sm">Seluruh berkas berhasil diproses ke database. Anda dapat melihat laporan atau me-reload halaman untuk memeriksa riwayat.</p>
+                        <h4 class="font-semibold">Proses selesai</h4>
+                        <p class="text-sm">Seluruh berkas berhasil diproses. Muat ulang halaman untuk melihat riwayat terbaru.</p>
                     </div>
                     <button type="button" onclick="window.location.reload()" class="ml-auto font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed">
-                        Refresh Halaman
+                        Muat Ulang
                     </button>
                 </div>
             </div>
@@ -291,19 +291,15 @@
                         {% for file in history %}
                         <tr id="row-file-{{ file.id }}" class="border-b border-base-200 dark:border-base-800 hover:bg-base-50 dark:hover:bg-base-800 transition-colors">
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-font-important-light dark:text-font-important-dark truncate" title="{{ file.file_path }}">
-                                    {{ file.file_path|slice:"-35:" }}
+                                <div class="text-sm font-medium font-mono text-font-important-light dark:text-font-important-dark truncate" title="{{ file.file_path }}">
+                                    {{ file.file_path|basename }}
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm text-font-default-light dark:text-font-default-dark font-medium">{{ file.project.project_id }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium 
-                                    {% if file.file_type == 'WTT' %}bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400
-                                    {% elif file.file_type == 'PPRP' %}bg-primary-50 text-primary-700 dark:bg-primary-500/20 dark:text-primary-300
-                                    {% elif file.file_type == 'GHP' %}bg-orange-50 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400
-                                    {% else %}bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300{% endif %}">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300">
                                     {{ file.file_type }}
                                 </span>
                             </td>
@@ -326,7 +322,7 @@
                                 {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                                <button type="button" onclick="openDeleteModal('{{ file.id }}', '{{ file.file_path|slice:"-30:" }}', '{{ file.file_type }}')" class="inline-flex items-center text-red-600 hover:text-red-700 dark:text-red-400 p-1.5 rounded-default hover:bg-red-50 dark:hover:bg-red-500/20 transition-colors" title="Hapus File & Bersihkan Data">
+                                <button type="button" onclick="openDeleteModal('{{ file.id }}', '{{ file.file_path|basename|escapejs }}', '{{ file.file_type }}')" class="inline-flex items-center text-red-600 hover:text-red-700 dark:text-red-400 p-1.5 rounded-default hover:bg-red-50 dark:hover:bg-red-500/20 transition-colors" title="Hapus File & Bersihkan Data">
                                     <span class="material-symbols-outlined text-xl">delete</span>
                                 </button>
                             </td>
@@ -589,10 +585,10 @@
                     label.textContent = 'Mendeteksi periode & menyimpan data...';
                 } else if (phase === 'done') {
                     fill.classList.add('done');
-                    label.textContent = 'Selesai!';
+                    label.textContent = 'Selesai';
                 } else if (phase === 'error') {
                     fill.classList.add('error');
-                    label.textContent = 'Gagal!';
+                    label.textContent = 'Gagal';
                 }
             }
             
@@ -673,17 +669,14 @@
                         showResult(stepObj, 'success', formatIngestResult(result));
                         rememberUploadedFiles(result);
                         
-                        // AUTO-DISABLE THIS STEP CARD
-                        btn.innerHTML = '<span class="material-symbols-outlined text-lg">check_circle</span> <span class="btn-text">Completed</span>';
-                        btn.classList.remove('bg-blue-600', 'bg-purple-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-purple-700', 'hover:bg-orange-700');
-                        btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                        // Kunci kartu langkah ini
+                        btn.innerHTML = '<span class="material-symbols-outlined text-lg">check_circle</span> <span class="btn-text">Selesai</span>';
                         btn.disabled = true;
                         stepObj.input.disabled = true;
                         if (stepObj.btnSkip) stepObj.btnSkip.disabled = true;
-                        
+
                         stepObj.badge.innerHTML = '<span class="material-symbols-outlined text-sm">check</span>';
-                        stepObj.badge.classList.remove('bg-blue-100', 'bg-purple-100', 'bg-orange-100', 'text-blue-600', 'text-purple-600', 'text-orange-600');
-                        stepObj.badge.classList.add('bg-green-100', 'text-green-600', 'dark:bg-green-900/30', 'dark:text-green-400');
+                        stepObj.badge.className = 'w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-400';
                         
                         // Unlock next step
                         if (nextStepObj) {
@@ -758,7 +751,7 @@
             }
             
             // Helper: Reset step back to default active state
-            function resetStep(step, stepNumber, type, colorClass, btnText) {
+            function resetStep(step, stepNumber, btnText) {
                 step.overlay.classList.add('hidden', 'opacity-0', 'pointer-events-none');
                 step.input.disabled = false;
                 step.input.value = '';
@@ -772,8 +765,6 @@
                 } else {
                     step.btn.className = `mt-4 w-full font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-transparent bg-primary-600 text-white hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed btn-upload`;
                 }
-                step.btn.style.backgroundColor = '#006b32';
-                step.btn.style.color = '#ffffff';
                 step.btn.innerHTML = `<span class="material-symbols-outlined text-lg btn-icon">cloud_upload</span> <span class="btn-text">${btnText}</span>`;
                 
                 step.badge.className = `w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300`;
@@ -836,9 +827,9 @@
                 periodBadgeContainer.classList.remove('hidden');
                 overallSuccess.classList.add('hidden');
 
-                resetStep(step1, 1, 'WTT', 'bg-blue-600', 'Upload WTT');
-                resetStep(step2, 2, 'PPRP', 'bg-purple-600', 'Upload PPRP');
-                resetStep(step3, 3, 'GHP', 'bg-orange-600', 'Upload GHP');
+                resetStep(step1, 1, 'Upload WTT');
+                resetStep(step2, 2, 'Upload PPRP');
+                resetStep(step3, 3, 'Upload GHP');
                 unlockStep(step1);
                 unlockStep(step2);
                 unlockStep(step3);
@@ -944,7 +935,7 @@
                         // 2. REACTIVE STEP UNLOCK
                         if (result.deleted_file_type === 'WTT') {
                             // Reset Step 1 (WTT) to active, lock Step 2 & 3
-                            resetStep(step1, 1, 'WTT', 'bg-blue-600', 'Upload WTT');
+                            resetStep(step1, 1, 'Upload WTT');
                             lockStep(step2, 'Upload WTT terlebih dahulu');
                             lockStep(step3, 'Upload PPRP atau lewati terlebih dahulu');
                             activeProjectId = null;
@@ -952,10 +943,10 @@
                             periodBadgeContainer.classList.add('hidden');
                             overallSuccess.classList.add('hidden');
                         } else if (result.deleted_file_type === 'PPRP') {
-                            resetStep(step2, 2, 'PPRP', 'bg-purple-600', 'Upload PPRP');
+                            resetStep(step2, 2, 'Upload PPRP');
                             unlockStep(step2);
                         } else if (result.deleted_file_type === 'GHP') {
-                            resetStep(step3, 3, 'GHP', 'bg-orange-600', 'Upload GHP');
+                            resetStep(step3, 3, 'Upload GHP');
                             unlockStep(step3);
                             overallSuccess.classList.add('hidden');
                         }
