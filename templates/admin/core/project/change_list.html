@@ -94,32 +94,18 @@
         </div>
     </div>
 
-    <!-- MODAL POPUP: DOWNLOAD REKAP -->
+    <!-- Modal: unduh rekap. Server tidak melaporkan kemajuan, jadi hanya spinner
+         + satu kalimat; file tersimpan otomatis begitu respons tiba. -->
     <div id="download-rekap-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-glass-backdrop hidden opacity-0 transition-opacity duration-200 p-4" style="left: 0; right: 0; top: 0; bottom: 0;">
-        <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-lg p-6 transition-all text-center flex flex-col" id="download-rekap-modal-card" style="max-width: 440px; width: 100%;">
-            
-            <!-- Icon -->
-            <div class="w-10 h-10 rounded-full mx-auto flex items-center justify-center mb-4 bg-primary-50 text-primary-600 dark:bg-primary-500/20 dark:text-primary-300">
-                <span class="material-symbols-outlined text-2xl">download</span>
-            </div>
-            
-            <!-- Title & Subtitle -->
-            <h3 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark mb-1">Mengunduh Rekap...</h3>
-            <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark mb-6 px-2 leading-relaxed">Mohon tunggu sebentar, file sedang disiapkan.</p>
-            
-            <!-- Progress Bar Section -->
-            <div class="mb-6 text-left">
-                <div class="flex justify-between items-center text-xs font-medium mb-2">
-                    <span class="text-font-subtle-light dark:text-font-subtle-dark">Progress</span>
-                    <span id="download-rekap-percentage" class="text-primary-600 dark:text-primary-400 font-semibold tabular-nums">0%</span>
-                </div>
-                <div class="w-full h-2 rounded-full overflow-hidden bg-base-200 dark:bg-base-700" id="download-rekap-progress-track">
-                    <div id="download-rekap-progress-bar" class="h-full rounded-full transition-all bg-primary-600" style="width: 0%;"></div>
+        <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-lg p-6 transition-all flex flex-col" id="download-rekap-modal-card" style="max-width: 400px; width: 100%;">
+            <div class="flex items-center gap-3">
+                <span class="av-spinner w-6 h-6 shrink-0"></span>
+                <div>
+                    <h3 class="text-base font-semibold text-font-important-light dark:text-font-important-dark">Menyiapkan rekap satu musim</h3>
+                    <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark" id="download-rekap-status">File akan tersimpan otomatis setelah siap.</p>
                 </div>
             </div>
-            
-            <!-- Action Buttons -->
-            <div class="flex items-center justify-end pt-2">
+            <div class="flex items-center justify-end mt-5">
                 <button type="button" onclick="cancelDownloadRekap()" class="font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent hover:bg-base-100/80 dark:hover:bg-base-800/80">
                     Batal
                 </button>
@@ -142,65 +128,26 @@
         }
 
         // ==========================================
-        // DOWNLOAD REKAP MODAL LOGIC (FETCH DRIVEN)
+        // UNDUH REKAP (fetch + simpan blob; bisa dibatalkan)
         // ==========================================
-        let downloadRekapInterval = null;
         let downloadAbortController = null;
 
         window.openDownloadRekapModal = async function(downloadUrl) {
             toggleBackgroundBlur(true);
             const modal = document.getElementById('download-rekap-modal');
             const modalCard = document.getElementById('download-rekap-modal-card');
-            const progressBar = document.getElementById('download-rekap-progress-bar');
-            const percentageText = document.getElementById('download-rekap-percentage');
-            
-            if (!modal || !modalCard) return;
+            const statusText = document.getElementById('download-rekap-status');
 
-            // Reset state
-            if (progressBar) {
-                progressBar.style.width = '0%';
-                progressBar.style.backgroundColor = '#006b32';
-            }
-            if (percentageText) {
-                percentageText.textContent = '0%';
-                percentageText.style.color = '#006b32';
-            }
-            if (downloadRekapInterval) clearInterval(downloadRekapInterval);
-            
-            // Show modal with animation
+            if (!modal || !modalCard) return;
+            if (statusText) statusText.textContent = 'File akan tersimpan otomatis setelah siap.';
+
             modal.classList.remove('hidden');
             setTimeout(() => {
                 modal.classList.remove('opacity-0');
                 modalCard.classList.remove('scale-95');
                 modalCard.classList.add('scale-100');
             }, 10);
-            
-            // Smooth dynamic progress simulation while waiting for server response
-            let progress = 0;
-            downloadRekapInterval = setInterval(() => {
-                let increment = 0;
-                if (progress < 40) {
-                    increment = Math.floor(Math.random() * 8) + 4;
-                } else if (progress < 70) {
-                    increment = Math.floor(Math.random() * 5) + 2;
-                } else if (progress < 88) {
-                    increment = Math.floor(Math.random() * 3) + 1;
-                } else if (progress < 94) {
-                    increment = 0.5;
-                }
-                
-                progress += increment;
-                if (progress >= 94) {
-                    progress = 94;
-                    clearInterval(downloadRekapInterval);
-                }
-                
-                const cur = Math.floor(progress);
-                if (progressBar) progressBar.style.width = cur + '%';
-                if (percentageText) percentageText.textContent = cur + '%';
-            }, 150);
 
-            // Create AbortController for cancelation
             downloadAbortController = new AbortController();
 
             try {
@@ -213,13 +160,8 @@
                     throw new Error('Gagal mengunduh rekap. Status: ' + response.status);
                 }
 
-                // Check content type or disposition
                 const blob = await response.blob();
-                
-                // Clear simulated interval and set to 100%
-                if (downloadRekapInterval) clearInterval(downloadRekapInterval);
-                if (progressBar) progressBar.style.width = '100%';
-                if (percentageText) percentageText.textContent = '100%';
+                if (statusText) statusText.textContent = 'Selesai, file tersimpan.';
 
                 // Extract filename
                 let filename = "Report_Rekap_Satu_Musim.xlsx";
@@ -241,17 +183,13 @@
                 a.remove();
                 window.URL.revokeObjectURL(blobUrl);
 
-                // Auto close modal after brief delay so user sees 100%
-                setTimeout(() => {
-                    closeDownloadRekapModal();
-                }, 800);
+                setTimeout(closeDownloadRekapModal, 600);
 
             } catch (err) {
                 if (err.name === 'AbortError') {
-                    // Canceled by user, no error prompt needed
+                    // Dibatalkan pengguna, tidak perlu pesan.
                     return;
                 }
-                if (downloadRekapInterval) clearInterval(downloadRekapInterval);
                 alert('Terjadi kendala saat menyiapkan file: ' + err.message);
                 closeDownloadRekapModal();
             }
@@ -268,9 +206,7 @@
             toggleBackgroundBlur(false);
             const modal = document.getElementById('download-rekap-modal');
             const modalCard = document.getElementById('download-rekap-modal-card');
-            
-            if (downloadRekapInterval) clearInterval(downloadRekapInterval);
-            
+
             if (!modal) return;
             modal.classList.add('opacity-0');
             if (modalCard) {

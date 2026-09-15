@@ -6,9 +6,11 @@
     <title>Menyusun Laporan - {{ project.project_id }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <style>
+        /* Layar tunggu sebelum report_view.html: gaya (font, navbar, badge, tombol)
+           mengikuti halaman laporan supaya pergantiannya tidak terasa. */
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
@@ -41,98 +43,39 @@
         .stage {
             display: flex;
             justify-content: center;
-            padding: 72px 24px 48px;
+            padding: 96px 24px 48px;
         }
 
-        .card { width: 100%; max-width: 430px; }
+        .card {
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #006b32;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 
         .card-title {
-            text-align: center;
-            font-size: 17px;
-            font-weight: 700;
+            font-size: 16px;
+            font-weight: 600;
             color: #111827;
         }
 
-        #stageLabel {
-            text-align: center;
+        .hint {
             font-size: 13px;
             color: #6b7280;
             margin-top: 6px;
-            min-height: 19px;
         }
-
-        .track {
-            position: relative;
-            height: 6px;
-            background: #e5e7eb;
-            border-radius: 999px;
-            margin: 40px 0 14px;
-        }
-
-        #fill {
-            height: 100%;
-            width: 0;
-            background: #006b32;
-            border-radius: 999px;
-            transition: width .6s cubic-bezier(.4, 0, .2, 1);
-        }
-
-        #plane {
-            position: absolute;
-            top: -31px;
-            left: 0;
-            transform: translateX(-50%);
-            color: #006b32;
-            font-size: 23px;
-            transition: left .6s cubic-bezier(.4, 0, .2, 1);
-        }
-
-        .meta-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .dots { display: flex; gap: 6px; align-items: center; }
-
-        .dot {
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
-            background: #d1d5db;
-            transition: background .3s;
-        }
-
-        .dot.on { background: #006b32; }
-
-        .pct {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-            font-weight: 700;
-            color: #006b32;
-        }
-
-        .skeleton {
-            margin-top: 34px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            animation: pulse 1.8s ease-in-out infinite;
-        }
-
-        .sk-line { height: 9px; background: #e6e8ec; border-radius: 4px; }
-
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
-
-        .hint {
-            text-align: center;
-            font-size: 11.5px;
-            color: #9ca3af;
-            margin-top: 18px;
-        }
-
-        /* Kondisi gagal */
-        .error-box { text-align: center; }
 
         .error-title {
             font-size: 15px;
@@ -184,35 +127,12 @@
     <div class="stage">
         <div class="card">
             <div id="loadingView">
-                <p class="card-title">Menyusun laporan realisasi</p>
-                <p id="stageLabel">Menghubungkan ke basis data&hellip;</p>
-
-                <div class="track">
-                    <div id="fill"></div>
-                    <span id="plane" class="material-symbols-outlined">flight_takeoff</span>
-                </div>
-
-                <div class="meta-row">
-                    <div class="dots">
-                        <span class="dot on" data-step="0"></span>
-                        <span class="dot" data-step="1"></span>
-                        <span class="dot" data-step="2"></span>
-                        <span class="dot" data-step="3"></span>
-                    </div>
-                    <div class="pct"><span id="pct">0</span>%</div>
-                </div>
-
-                <div class="skeleton">
-                    <div class="sk-line" style="width: 100%"></div>
-                    <div class="sk-line" style="width: 88%"></div>
-                    <div class="sk-line" style="width: 94%"></div>
-                    <div class="sk-line" style="width: 70%"></div>
-                </div>
-
-                <p class="hint">Laporan besar butuh beberapa detik. Jangan tutup tab ini.</p>
+                <span class="spinner" aria-hidden="true"></span>
+                <p class="card-title">Menyusun laporan realisasi&hellip;</p>
+                <p class="hint">Butuh beberapa detik untuk bulan dengan banyak penerbangan. Jangan tutup tab ini.</p>
             </div>
 
-            <div id="errorView" class="error-box hidden">
+            <div id="errorView" class="hidden">
                 <span class="material-symbols-outlined" style="font-size: 40px; color: #b91c1c;">error</span>
                 <p class="error-title">Laporan gagal dimuat</p>
                 <p class="error-msg" id="errorMsg"></p>
@@ -234,58 +154,12 @@
 
 <script>
 (function () {
-    var fill = document.getElementById('fill'),
-        plane = document.getElementById('plane'),
-        pctEl = document.getElementById('pct'),
-        label = document.getElementById('stageLabel'),
-        dots = document.querySelectorAll('.dot'),
-        shown = 0,        // persen yang sedang ditampilkan
-        creep = null,
-        timers = [];
-
-    // Tahapan mengikuti urutan kerja nyata di server. Django tidak melaporkan
-    // kemajuan per tahap, jadi bilah maju berbasis waktu lalu menunggu di 95%
-    // sampai data benar-benar tiba — tidak pernah mengklaim 100% lebih awal.
-    var STAGES = [
-        { at: 250,  pct: 18, text: 'Membaca jadwal penerbangan…' },
-        { at: 2000, pct: 46, text: 'Mencocokkan realisasi harian dari GHP…' },
-        { at: 5000, pct: 72, text: 'Menghitung periode & surat PPRP…' },
-        { at: 9000, pct: 88, text: 'Menyusun tabel laporan…' }
-    ];
-
-    function paint(pct, text, step) {
-        shown = pct;
-        fill.style.width = pct + '%';
-        plane.style.left = pct + '%';
-        pctEl.textContent = Math.round(pct);
-        if (text) { label.textContent = text; }
-        if (step !== undefined) {
-            dots.forEach(function (d, i) { d.classList.toggle('on', i <= step); });
-        }
-    }
-
+    // Django tidak melaporkan kemajuan per tahap, jadi tidak ada bilah persen:
+    // halaman ini hanya menunggu ?data=1 lalu menggantikan isinya dengan laporan.
     function start() {
         document.getElementById('errorView').classList.add('hidden');
         document.getElementById('loadingView').classList.remove('hidden');
-        timers.forEach(clearTimeout);
-        timers = [];
-        if (creep) { clearInterval(creep); }
-        paint(0, 'Menghubungkan ke basis data…', 0);
 
-        STAGES.forEach(function (s, i) {
-            timers.push(setTimeout(function () { paint(s.pct, s.text, i); }, s.at));
-        });
-        // Merayap pelan menuju 95% bila server lebih lama dari perkiraan
-        timers.push(setTimeout(function () {
-            creep = setInterval(function () {
-                if (shown < 95) { paint(shown + 0.4); }
-            }, 700);
-        }, 9600));
-
-        fetchReport();
-    }
-
-    function fetchReport() {
         fetch('?data=1', { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (res) {
                 if (res.redirected) { window.location.href = res.url; return null; }
@@ -294,18 +168,11 @@
             })
             .then(function (html) {
                 if (html === null || html === undefined) { return; }
-                if (creep) { clearInterval(creep); }
-                timers.forEach(clearTimeout);
-                paint(100, 'Selesai — menampilkan laporan', 3);
-                setTimeout(function () {
-                    document.open();
-                    document.write(html);
-                    document.close();
-                }, 380);
+                document.open();
+                document.write(html);
+                document.close();
             })
             .catch(function (err) {
-                if (creep) { clearInterval(creep); }
-                timers.forEach(clearTimeout);
                 document.getElementById('loadingView').classList.add('hidden');
                 document.getElementById('errorMsg').textContent = err.message || 'Tidak dapat menghubungi server.';
                 document.getElementById('errorView').classList.remove('hidden');
