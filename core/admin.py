@@ -51,13 +51,13 @@ class ProjectAdmin(ModelAdmin):
             obj.project_id
         )
     
-    @display(description="View Report")
+    @display(description="Laporan")
     def view_report_action(self, obj):
         url = f"/admin/core/project/{obj.pk}/view-report/"
         return format_html(
             '<a href="{}" target="_blank" class="inline-flex items-center justify-center gap-1.5 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer select-none" style="background-color: #006b32; color: #ffffff !important; text-decoration: none;" title="Buka tampilan laporan realisasi di tab baru">'
             '<span class="material-symbols-outlined text-[17px] text-white">visibility</span>'
-            '<span>View Report</span>'
+            '<span>Lihat Laporan</span>'
             '</a>',
             url
         )
@@ -269,11 +269,11 @@ class ScheduleVersionAdmin(ModelAdmin):
     def display_flight_number(self, obj):
         return format_html("<strong>{}</strong> <span class='text-gray-500 text-xs'>(v{})</span>", obj.flight_number, obj.version_number)
 
-    @display(description="Route")
+    @display(description="Rute")
     def display_route(self, obj):
         return format_html("<strong>{}</strong> ➔ <strong>{}</strong>", obj.origin, obj.destination)
         
-    @display(description="Schedule (STD ➔ STA)")
+    @display(description="Jadwal (STD → STA)")
     def display_schedule(self, obj):
         std_str = obj.std.strftime('%H:%M') if obj.std else '--:--'
         sta_str = obj.sta.strftime('%H:%M') if obj.sta else '--:--'
@@ -285,7 +285,7 @@ class ScheduleVersionAdmin(ModelAdmin):
             return "ACTIVE"
         return "INACTIVE (PPRP)"
         
-    @display(description="Operation", label={"OPERATED": "info", "UNVERIFIED": "warning"})
+    @display(description="Operasi", label={"OPERATED": "info", "UNVERIFIED": "warning"})
     def display_operated(self, obj):
         if obj.operational_flag:
             return "OPERATED"

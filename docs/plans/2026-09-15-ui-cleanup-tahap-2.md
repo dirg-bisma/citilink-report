@@ -85,3 +85,32 @@ Aman dulu (hanya teks/kelas), yang menyentuh logika di akhir.
   backslash ganda, kalau tidak selalu 0).
 - Verifikasi: `manage.py check` bersih; `test_both_upload_pages_render` lulus; pratinjau Flight Schedules
   (6543 baris, 131 halaman) menampilkan "Menampilkan 1–50 dari 6543 data" dan « ‹ 1 2 3 4 › » dengan gaya tombol Unfold.
+
+### No 7 — bahasa label umum (selesai)
+
+Istilah teknis (OTP, STD/STA/ATD/ATA, AGT/SGT, OPERATED, NO OPS, ACTIVE, WTT/PPRP/GHP, Upload, Dashboard,
+Project) sengaja tetap.
+
+- Sidebar (`config/settings.py`): Navigation → Navigasi; Flight Schedules → Jadwal Penerbangan; Projects → Project;
+  Administration → Administrasi; User Management → Pengguna; Groups → Grup.
+- Upload Data: judul "Upload Source File" → "Upload Data" (sama dengan menu); "Auto-Detect Periode" → "Periode";
+  "Select WTT/PPRP/GHP file" → "Pilih file …"; "Uploading..." → "Mengunggah file..."; "Processing..." →
+  "Memproses..."; Skip/Skipped → Lewati/Dilewati; "Upload History" → "Riwayat Upload"; kolom File Name / Type /
+  Uploaded At / Uploader / Action → Nama File / Tipe / Waktu Upload / Diunggah oleh / Aksi.
+- Dashboard: "On Time Performance Target vs Actual (Harian)" → "OTP Harian: Target vs Aktual"; "Total Delay Time in
+  Hours by Delay Reason" → "Total Durasi Delay per Delay Code" (sekaligus mencerminkan isi grafik sejak `aa676d5`);
+  "Realisasi PPRP (Toleransi <= 45 Min)" → "(Toleransi ≤ 45 Menit)"; "Distribusi Rute Penerbangan Terbanyak (SUB
+  Origin) / Top 8 Destinasi" → "Rute Terbanyak dari SUB / 8 destinasi teratas"; legenda donat PPRP "Sesuai
+  Tolerance (<=45m)" → "Dalam toleransi (≤45 menit)".
+- `core/admin.py` (teks saja; kelas tombol dikerjakan di No 2): kolom "View Report" → "Laporan", tombolnya
+  "Lihat Laporan"; "Route" → "Rute"; "Schedule (STD ➔ STA)" → "Jadwal (STD → STA)"; "Operation" → "Operasi".
+- Verifikasi: `manage.py check` bersih; `test_both_upload_pages_render` lulus; pratinjau sidebar, Upload Data,
+  dashboard (judul chart + legenda), dan tabel Projects menampilkan label baru.
+- **Masih Inggris, perlu keputusan pemilik** (tidak diubah karena bukan dari template):
+  1. Judul kolom dari nama field model: "Project id", "Period", "Year", "Month", "Created by", "Created at",
+     "Flight date". Mengubahnya = `verbose_name` di `core/models.py` → Django membuat migrasi baru (0006).
+  2. Breadcrumb "Core › Projects / Schedule versions", judul tab "Select project to change", "Type to search",
+     "Filters", "Light/Dark/System", "Change password", "Global shortcuts": teks bawaan Django admin/Unfold.
+     Cara paling murah: `LANGUAGE_CODE = 'id'` (Django punya terjemahan Indonesia; Unfold tidak membawa folder
+     `locale`, jadi sebagian teks Unfold tetap Inggris). Efek samping: format tanggal admin berubah
+     ("Aug. 4, 2026" → "4 Agustus 2026"); laporan Excel tidak terpengaruh (pakai nama bulan sendiri).

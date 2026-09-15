@@ -195,7 +195,7 @@ UNFOLD = {
         "show_all_applications": False,
         "navigation": [
             {
-                "title": "Navigation",
+                "title": "Navigasi",
                 "separator": True,
                 "items": [
                     {
@@ -209,28 +209,28 @@ UNFOLD = {
                         "link": reverse_lazy("custom_upload"),
                     },
                     {
-                        "title": "Flight Schedules",
+                        "title": "Jadwal Penerbangan",
                         "icon": "flight_takeoff",
                         "link": reverse_lazy("admin:core_scheduleversion_changelist"),
                     },
                     {
-                        "title": "Projects",
+                        "title": "Project",
                         "icon": "folder",
                         "link": reverse_lazy("admin:core_project_changelist"),
                     },
                 ],
             },
             {
-                "title": "Administration",
+                "title": "Administrasi",
                 "separator": True,
                 "items": [
                     {
-                        "title": "User Management",
+                        "title": "Pengguna",
                         "icon": "group",
                         "link": reverse_lazy("admin:auth_user_changelist"),
                     },
                     {
-                        "title": "Groups",
+                        "title": "Grup",
                         "icon": "admin_panel_settings",
                         "link": reverse_lazy("admin:auth_group_changelist"),
                     },

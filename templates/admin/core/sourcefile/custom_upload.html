@@ -65,7 +65,7 @@
         
         <!-- TOP SECTION: UPLOAD FORM -->
         <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs p-6">
-            <h1 class="text-2xl font-semibold tracking-tight text-font-important-light dark:text-font-important-dark mb-2">Upload Source File</h1>
+            <h1 class="text-2xl font-semibold tracking-tight text-font-important-light dark:text-font-important-dark mb-2">Upload Data</h1>
             <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark mb-6">Unggah file sumber data secara berurutan. Periode Bulan & Tahun otomatis terdeteksi dari dokumen WTT.</p>
             
             <div class="flex flex-col gap-6">
@@ -74,7 +74,7 @@
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-primary-600 dark:text-primary-400 text-2xl">calendar_month</span>
                         <div>
-                            <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark">Auto-Detect Periode</span>
+                            <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark">Periode</span>
                             <p class="text-sm text-font-important-light dark:text-font-important-dark" id="period-status-text">
                                 Silakan upload file <strong>WTT (PDF)</strong> untuk memulai. Bulan & Tahun otomatis terdeteksi.
                             </p>
@@ -125,7 +125,7 @@
                                 <div class="space-y-1 text-center pointer-events-none">
                                     <span class="material-symbols-outlined text-3xl text-base-400">picture_as_pdf</span>
                                     <div class="text-sm text-font-default-light dark:text-font-default-dark">
-                                        <span class="text-primary-600 font-medium">Select WTT file</span>
+                                        <span class="text-primary-600 font-medium">Pilih file WTT</span>
                                     </div>
                                     <p class="text-xs text-base-400">Mendeteksi bulan & baseline jadwal</p>
                                 </div>
@@ -139,7 +139,7 @@
                                 <div class="progress-bar-container">
                                     <div class="progress-bar-fill uploading"></div>
                                 </div>
-                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Uploading...</p>
+                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Mengunggah file...</p>
                             </div>
                             <!-- Result Notification -->
                             <div class="result-notification mt-3 hidden"></div>
@@ -171,7 +171,7 @@
                                 <div class="space-y-1 text-center pointer-events-none">
                                     <span class="material-symbols-outlined text-3xl text-base-400">picture_as_pdf</span>
                                     <div class="text-sm text-font-default-light dark:text-font-default-dark">
-                                        <span class="text-primary-600 font-medium">Select PPRP file</span>
+                                        <span class="text-primary-600 font-medium">Pilih file PPRP</span>
                                     </div>
                                     <p class="text-xs text-base-400">Surat perubahan jadwal</p>
                                 </div>
@@ -185,7 +185,7 @@
                                 <div class="progress-bar-container">
                                     <div class="progress-bar-fill uploading"></div>
                                 </div>
-                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Uploading...</p>
+                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Mengunggah file...</p>
                             </div>
                             <!-- Result Notification -->
                             <div class="result-notification mt-3 hidden"></div>
@@ -195,7 +195,7 @@
                                     <span class="material-symbols-outlined text-lg btn-icon">cloud_upload</span> <span class="btn-text">Upload PPRP</span>
                                 </button>
                                 <button type="button" id="btn-skip" class="flex-1 font-medium inline-flex items-center gap-1 rounded-default justify-center whitespace-nowrap cursor-pointer px-3 py-2 text-sm border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-transparent hover:bg-base-100/80 dark:hover:bg-base-800/80 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                                    <span>Skip</span> <span class="material-symbols-outlined text-lg">skip_next</span>
+                                    <span>Lewati</span> <span class="material-symbols-outlined text-lg">skip_next</span>
                                 </button>
                             </div>
                         </form>
@@ -222,7 +222,7 @@
                                 <div class="space-y-1 text-center pointer-events-none">
                                     <span class="material-symbols-outlined text-3xl text-base-400">table_view</span>
                                     <div class="text-sm text-font-default-light dark:text-font-default-dark">
-                                        <span class="text-primary-600 font-medium">Select GHP file</span>
+                                        <span class="text-primary-600 font-medium">Pilih file GHP</span>
                                     </div>
                                     <p class="text-xs text-base-400">Realisasi operasional penerbangan</p>
                                 </div>
@@ -236,7 +236,7 @@
                                 <div class="progress-bar-container">
                                     <div class="progress-bar-fill uploading"></div>
                                 </div>
-                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Uploading...</p>
+                                <p class="progress-label text-xs text-font-subtle-light dark:text-font-subtle-dark mt-1">Mengunggah file...</p>
                             </div>
                             <!-- Result Notification -->
                             <div class="result-notification mt-3 hidden"></div>
@@ -269,7 +269,7 @@
         <div class="bg-white dark:bg-base-900 rounded-default border border-base-200 dark:border-base-800 shadow-xs overflow-hidden">
             <div class="px-6 py-4 border-b border-base-200 dark:border-base-800 flex justify-between items-center">
                 <div>
-                    <h2 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark">Upload History</h2>
+                    <h2 class="text-lg font-semibold text-font-important-light dark:text-font-important-dark">Riwayat Upload</h2>
                     <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Riwayat file sumber data yang diunggah ke sistem.</p>
                 </div>
             </div>
@@ -278,13 +278,13 @@
                 <table class="w-full" id="history-table">
                     <thead class="bg-base-50 dark:bg-base-800">
                         <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">File Name</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Nama File</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Project</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Type</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Uploaded At</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Uploader</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Tipe</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Waktu Upload</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Diunggah oleh</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Status</th>
-                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Action</th>
+                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-font-subtle-light dark:text-font-subtle-dark border-b border-base-200 dark:border-base-800">Aksi</th>
                         </tr>
                     </thead>
                     <tbody id="history-tbody">
@@ -624,7 +624,7 @@
 
                 // Show uploading progress
                 btn.disabled = true;
-                btn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">refresh</span> <span class="btn-text">Processing...</span>';
+                btn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">refresh</span> <span class="btn-text">Memproses...</span>';
                 showProgress(stepObj, 'uploading');
 
                 const formData = new FormData(form);
@@ -725,7 +725,7 @@
             // Skip button on Step 2 (PPRP)
             step2.btnSkip.addEventListener('click', function() {
                 step2.overlay.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
-                step2.overlay.querySelector('p').textContent = 'Skipped';
+                step2.overlay.querySelector('p').textContent = 'Dilewati';
                 step2.badge.innerHTML = '<span class="material-symbols-outlined text-sm">skip_next</span>';
                 step2.input.disabled = true;
                 step2.btn.disabled = true;

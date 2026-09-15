@@ -117,7 +117,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">On Time Performance Target vs Actual (Harian)</h2>
+                    <h2 class="font-semibold text-[15px] text-important">OTP Harian: Target vs Aktual</h2>
                     <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Target 90%</span>
                 </div>
                 <div class="chart-box" id="dailyTrendContainer">
@@ -126,7 +126,7 @@
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">Total Delay Time in Hours by Delay Reason</h2>
+                    <h2 class="font-semibold text-[15px] text-important">Total Durasi Delay per Delay Code</h2>
                     <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Durasi Jam:Menit</span>
                 </div>
                 <div class="chart-box" id="delayDurationContainer">
@@ -144,7 +144,7 @@
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">Realisasi PPRP (Toleransi &lt;= 45 Min)</h2>
+                    <h2 class="font-semibold text-[15px] text-important">Realisasi PPRP (Toleransi &le; 45 Menit)</h2>
                     <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Target 100%</span>
                 </div>
                 <div class="chart-box" id="pprpAchievementContainer">
@@ -153,8 +153,8 @@
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">Distribusi Rute Penerbangan Terbanyak (SUB Origin)</h2>
-                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Top 8 Destinasi</span>
+                    <h2 class="font-semibold text-[15px] text-important">Rute Terbanyak dari SUB</h2>
+                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">8 destinasi teratas</span>
                 </div>
                 <div class="chart-box" id="routeDistContainer">
                     <canvas id="routeDistChart"></canvas>
@@ -483,7 +483,7 @@
             pprpAchievementInstance = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Sesuai Tolerance (<=45m)', 'Diluar Tolerance (>45m)'],
+                    labels: ['Dalam toleransi (≤45 menit)', 'Di luar toleransi (>45 menit)'],
                     datasets: [{
                         data: [onTime, outOfTol],
                         backgroundColor: [C_GREEN, C_GRAY_2],
