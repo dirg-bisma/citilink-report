@@ -123,3 +123,22 @@ Project) sengaja tetap.
 - Tes baru `tests/test_dashboard.py` (3 tes): tanpa ATA → "-", tanpa flight → "-", data lengkap → AGT 1:45 / SGT 1:30
   dihitung sungguhan.
 - Verifikasi: `manage.py check` bersih; `tests.test_dashboard` + `tests.test_delay_code` (18 tes) lulus.
+
+### No 2 — tombol di tabel Projects & Flight Schedules (selesai)
+
+`core/admin.py` membangun tombol lewat `format_html`, jadi luput dari perapian 13 Sep yang hanya menyentuh template.
+
+- Konstanta `ROW_BUTTON_CLASSES`: varian default `unfold/components/button.html` dengan padding rapat
+  (`px-2.5 py-1.5 text-xs`). Dipakai "Upload PPRP", "Lihat Laporan", "Detail". Tidak ada lagi `#006b32`,
+  `hover:brightness-110`, `active:scale-95`, `rounded-lg`, `shadow-sm`, `text-[17px]`, `text-[#006b32]`.
+- "Upload PPRP" dan "Lihat Laporan" tidak lagi dua tombol hijau solid per baris; ikon `open_in_new` pada
+  "Lihat Laporan" menandai tab baru. `onclick="openPprpModal(...)"`, `target="_blank"`, dan URL tidak berubah.
+- "Detail": ikon `info` dibuang; memanggil `openScheduleDetail(id)` langsung (alias `openScheduleDetailModal` di
+  template tetap ada untuk jaga-jaga).
+- Kolom Flight: `(v1)` memakai `text-font-subtle-*` (sebelumnya `text-gray-500`, tidak ada di CSS Unfold).
+- Kolom Rute dan Jadwal: `➔` → `→`, tanpa `<strong>`.
+- Label Operasi: OPERATED `info` (biru) → `success` (hijau); UNVERIFIED `warning` → `danger` (merah), sama dengan
+  badge OPERATED/NO OPS di kartu rincian. Tidak ada lagi biru di aplikasi.
+- Verifikasi: `manage.py check` bersih; `test_both_upload_pages_render` lulus; di pratinjau, klik "Upload PPRP"
+  membuka modal dengan kode project yang benar (PRJ-202608, id 124), klik "Detail" menyembunyikan tabel dan
+  membuka kartu rincian (QG834).
