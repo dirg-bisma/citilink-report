@@ -701,8 +701,13 @@ def _shift_merged_ranges_below(ws, row_idx, amount):
 
 def _shift_formulas_below(ws, row_idx, amount):
     """Update seluruh formula di bawah row_idx karena ada penyisipan baris."""
-    for r in range(row_idx + amount, ws.max_row + 1):
-        for c in range(1, ws.max_column + 1):
+    # ws.max_row / ws.max_column memindai ulang seluruh sel setiap kali diakses;
+    # simpan sekali di luar loop agar tidak dihitung ulang per baris (sangat lambat
+    # untuk worksheet besar seperti rekap satu musim).
+    max_row = ws.max_row
+    max_col = ws.max_column
+    for r in range(row_idx + amount, max_row + 1):
+        for c in range(1, max_col + 1):
             cell = ws.cell(r, c)
             val = cell.value
             if isinstance(val, str) and val.startswith('='):

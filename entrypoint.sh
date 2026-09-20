@@ -19,7 +19,9 @@ echo "MySQL is up."
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
+# --timeout dinaikkan karena Download Rekap (menggabungkan seluruh project)
+# bisa berjalan beberapa menit; 120s sebelumnya memutus proses di tengah jalan.
 exec gunicorn config.wsgi:application \
     --bind 0.0.0.0:8000 \
     --workers 3 \
-    --timeout 120
+    --timeout 600
