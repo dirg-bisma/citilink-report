@@ -71,8 +71,8 @@ Tiga temuan teknis yang menjadi akar masalah:
 - Header: ikon `flight_takeoff` dalam kotak cyan dan tagline *"AViation Operations Report • Real-Time Analytics"*
   dihapus; judul jadi "OTP Dashboard" dengan subjudul "Station A Class SUB".
 - Selector project/tanggal memakai kelas select Unfold + ikon `expand_more`; kotak berbingkai "Tgl" dihapus.
-- KPI: **susunan tetap 7 kartu sejajar** (`grid-cols-2 md:grid-cols-4 lg:grid-cols-7`). Label huruf biasa,
-  angka `text-2xl font-semibold tabular-nums`; Delay merah, OTP Dep/Arr hijau `primary`, lainnya warna teks penting.
+- KPI: **susunan 6 kartu sejajar** (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`): Flights, On Time, Delay, OTP, Realisasi PPRP, dan Total Durasi Delay (paling kanan). Kartu AGT/SGT dan OTP Arr digantikan dengan metrik inti stasiun (Total Durasi Delay dan Realisasi PPRP). Label huruf biasa,
+  angka `text-2xl font-semibold tabular-nums`; Delay & Total Durasi Delay merah, OTP & Realisasi PPRP hijau `primary`, lainnya warna teks penting.
   Badge REG/CHRT jadi teks kecil biasa. Tidak ada hover melayang.
 - Chart: ikon berwarna di judul dihapus. Palet Chart.js: `C_GREEN #006b32`, `C_GREEN_2 #4faa79`, `C_GREEN_3 #b8dfc7`,
   `C_GRAY #8b9299`, `C_GRAY_2 #c7ccd1`, `C_RED #dc2626`. Garis OTP hijau, garis target abu-abu putus-putus,

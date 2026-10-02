@@ -76,16 +76,11 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
                 <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Flights</p>
                 <h3 class="text-2xl font-semibold mt-1 tabular-nums text-font-important-light dark:text-font-important-dark" id="valFlights">-</h3>
                 <div class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2 flex flex-wrap gap-2"><span id="badgeReg">REG: -</span><span id="badgeChrt">CHRT: -</span></div>
-            </div>
-            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Delay</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-red-600 dark:text-red-400" id="valDelay">-</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Terlambat &gt; 15 min</p>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
                 <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">On Time</p>
@@ -93,24 +88,24 @@
                 <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Tepat Waktu</p>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Average AGT</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-font-important-light dark:text-font-important-dark" id="valAvgAgt">-</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Actual Ground Time</p>
+                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Delay</p>
+                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-red-600 dark:text-red-400" id="valDelay">-</h3>
+                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Terlambat &gt; 15 min</p>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Average SGT</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-font-important-light dark:text-font-important-dark" id="valAvgSgt">-</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Sched. Ground Time</p>
-            </div>
-            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">OTP Dep</p>
+                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">OTP</p>
                 <h3 class="text-2xl font-semibold mt-1 tabular-nums text-primary-600 dark:text-primary-400" id="valOtpDep">-%</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Keberangkatan</p>
+                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Target 90% (Dep)</p>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">OTP Arr</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-primary-600 dark:text-primary-400" id="valOtpArr">-%</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Kedatangan</p>
+                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Realisasi PPRP</p>
+                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-primary-600 dark:text-primary-400" id="valPprp">-%</h3>
+                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Target 100% (&le; 45m)</p>
+            </div>
+            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
+                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Total Durasi Delay</p>
+                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-red-600 dark:text-red-400" id="valDelayDuration">-</h3>
+                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Total Jam:Menit</p>
             </div>
         </div>
 
@@ -126,11 +121,11 @@
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">Total Durasi Delay per Delay Code</h2>
-                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Durasi Jam:Menit</span>
+                    <h2 class="font-semibold text-[15px] text-important">Realisasi PPRP (Toleransi &le; 45 Menit)</h2>
+                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Target 100%</span>
                 </div>
-                <div class="chart-box" id="delayDurationContainer">
-                    <canvas id="delayDurationChart"></canvas>
+                <div class="chart-box" id="pprpAchievementContainer">
+                    <canvas id="pprpAchievementChart"></canvas>
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
@@ -144,11 +139,11 @@
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">Realisasi PPRP (Toleransi &le; 45 Menit)</h2>
-                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Target 100%</span>
+                    <h2 class="font-semibold text-[15px] text-important">Total Durasi Delay per Delay Code</h2>
+                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Durasi Jam:Menit</span>
                 </div>
-                <div class="chart-box" id="pprpAchievementContainer">
-                    <canvas id="pprpAchievementChart"></canvas>
+                <div class="chart-box" id="delayDurationContainer">
+                    <canvas id="delayDurationChart"></canvas>
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
@@ -193,12 +188,11 @@
             document.getElementById('valFlights').textContent = data.otp.total.toLocaleString();
             document.getElementById('badgeReg').textContent = `REG: ${data.otp.reg_count}`;
             document.getElementById('badgeChrt').textContent = `CHRT/XTRA: ${data.otp.chrt_count}`;
-            document.getElementById('valDelay').textContent = data.otp.delayed.toLocaleString();
             document.getElementById('valOnTime').textContent = data.otp.on_time.toLocaleString();
-            document.getElementById('valAvgAgt').textContent = data.otp.avg_agt;
-            document.getElementById('valAvgSgt').textContent = data.otp.avg_sgt;
+            document.getElementById('valDelay').textContent = data.otp.delayed.toLocaleString();
+            document.getElementById('valDelayDuration').textContent = (data.delay_data && data.delay_data.total_duration_str) || '0j 00m';
             document.getElementById('valOtpDep').textContent = data.otp.otp_percent + '%';
-            document.getElementById('valOtpArr').textContent = data.otp.otp_arr_percent + '%';
+            document.getElementById('valPprp').textContent = ((data.pprp && data.pprp.achievement !== undefined) ? data.pprp.achievement : 0) + '%';
         }
 
         // 1. Daily OTP Trend Chart (Combo Line + Bar)

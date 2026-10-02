@@ -209,14 +209,14 @@ UNFOLD = {
                         "link": reverse_lazy("custom_upload"),
                     },
                     {
+                        "title": "Report",
+                        "icon": "description",
+                        "link": reverse_lazy("admin:core_project_changelist"),
+                    },
+                    {
                         "title": "Jadwal Penerbangan",
                         "icon": "flight_takeoff",
                         "link": reverse_lazy("admin:core_scheduleversion_changelist"),
-                    },
-                    {
-                        "title": "Project",
-                        "icon": "folder",
-                        "link": reverse_lazy("admin:core_project_changelist"),
                     },
                 ],
             },

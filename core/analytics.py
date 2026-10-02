@@ -215,10 +215,17 @@ def delay_factors(project_id: int, start_day: int = None, end_day: int = None) -
         'duration_str': f"{minutes[c] // 60:02d}:{minutes[c] % 60:02d}",
     } for c in by_minutes]
 
+    total_mins = sum(minutes.values())
+    total_hours = total_mins // 60
+    total_rem = total_mins % 60
+    total_duration_str = f"{total_hours}j {total_rem:02d}m" if total_mins > 0 else "0j 00m"
+
     return {
         'case_counts': case_counts,
         'durations': durations,
         'total_flights': total_flights,
+        'total_delay_minutes': total_mins,
+        'total_duration_str': total_duration_str,
     }
 
 
