@@ -16,6 +16,10 @@ MONTH_NAMES = {
 
 @staff_member_required
 def upload_source_file_view(request):
+    if not (request.user.has_perm('core.view_sourcefile') or request.user.has_perm('core.add_sourcefile')):
+        messages.error(request, "Anda tidak memiliki akses ke halaman Upload Data.")
+        return redirect('admin:index')
+
     projects = Project.objects.all().order_by('-created_at')
     history = SourceFile.objects.all().select_related('project', 'uploaded_by').order_by('-uploaded_at')[:50]
     
@@ -25,6 +29,13 @@ def upload_source_file_view(request):
         # 1. Action: DELETE SourceFile
         action = request.POST.get('action')
         if action == 'delete':
+            if not request.user.has_perm('core.delete_sourcefile'):
+                msg = "Anda tidak memiliki izin untuk menghapus file sumber."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message': msg}, status=403)
+                messages.error(request, msg)
+                return redirect('custom_upload')
+
             file_id = request.POST.get('file_id')
             if not file_id:
                 if is_ajax:
@@ -56,6 +67,13 @@ def upload_source_file_view(request):
         
         # 2. Action: UPLOAD SourceFile — semua jenis file lewat satu pintu
         # (core.ingest), sama persis dengan tombol Upload PPRP di menu Project.
+        if not request.user.has_perm('core.add_sourcefile'):
+            error_msg = "Anda tidak memiliki izin untuk mengunggah file acuan."
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': error_msg}, status=403)
+            messages.error(request, error_msg)
+            return redirect('custom_upload')
+
         file_type = request.POST.get('file_type')
         uploaded_files = request.FILES.getlist('file')
         project_id = request.POST.get('project_id')
@@ -136,7 +154,10 @@ def upload_source_file_view(request):
 @staff_member_required
 def global_dashboard_api(request):
     """API endpoint for global dashboard - returns analytics data for a given project and optional date range."""
-    from core.analytics import otp_metric, pprp_achievement, delay_factors, daily_otp_trend, flight_distribution
+    from core.analytics import (
+        otp_metric, pprp_achievement, delay_factors,
+        daily_otp_trend, flight_distribution, acceptable_level_of_delay
+    )
 
     project_id = request.GET.get('project_id')
     start_day_raw = request.GET.get('start_day')
@@ -172,6 +193,7 @@ def global_dashboard_api(request):
     otp_data = {'total': 0, 'reg_count': 0, 'chrt_count': 0, 'on_time': 0, 'delayed': 0, 'otp_percent': 0, 'otp_arr_percent': 0, 'avg_agt': '-', 'avg_sgt': '-'}
     pprp_data = {'achievement': 0, 'total': 0, 'on_time': 0}
     delay_data = {'case_counts': [], 'durations': [], 'total_flights': 0, 'total_delay_minutes': 0, 'total_duration_str': '0j 00m'}
+    alod_data = {'total_cases': 0, 'total_flights': 0, 'categories': [], 'top_category': None}
     daily_trend = []
     flight_dist = {'reg_count': 0, 'reg_pct': 0, 'chrt_count': 0, 'chrt_pct': 0, 'top_routes': []}
 
@@ -181,6 +203,7 @@ def global_dashboard_api(request):
             otp_data = otp_metric(project_id, start_day, end_day)
             pprp_data = pprp_achievement(project_id, project.month, start_day, end_day)
             delay_data = delay_factors(project_id, start_day, end_day)
+            alod_data = acceptable_level_of_delay(project_id, start_day, end_day)
             daily_trend = daily_otp_trend(project_id, start_day, end_day)
             flight_dist = flight_distribution(project_id, start_day, end_day)
         except Project.DoesNotExist:
@@ -199,6 +222,7 @@ def global_dashboard_api(request):
             'out_of_tolerance': pprp_out,
         },
         'delay_data': delay_data,
+        'alod_data': alod_data,
         'daily_trend': daily_trend,
         'flight_dist': flight_dist,
     })

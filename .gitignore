@@ -31,3 +31,4 @@ backups/
 
 # Konfigurasi lokal Claude Code (folder ber-ACL khusus, jangan dilacak git)
 .claude/
+/*.xls

@@ -313,3 +313,120 @@ def flight_distribution(project_id: int, start_day: int = None, end_day: int = N
         'top_routes': route_list,
     }
 
+
+# ---------------------------------------------------------------------------
+# ALOD (Acceptable Level of Delay) - PowerBI Replica
+# ---------------------------------------------------------------------------
+
+ALOD_CATEGORIES = {
+    'APT GOVERNMENTAL': {
+        'target': 5.30,
+        'codes': {'80', '81', '82', '83', '84', '85', '86', '87', '88', '89'},
+    },
+    'FLT OPS & CREW': {
+        'target': 1.48,
+        'codes': {'60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '94', '95', '96'},
+    },
+    'STN HANDLING & CARGO': {
+        'target': 1.91,
+        'codes': {
+            '10', '11', '12', '13', '15', '17', '18', '19', '20', '21', '22', '23',
+            '24', '26', '27', '28', '29', '31', '32', '33', '34', '35', '36', '37', '38', '39'
+        },
+    },
+    'TECHNICAL': {
+        'target': 2.97,
+        'codes': {'40', '41', '42', '43', '44', '45', '46', '47', '48'},
+    },
+    'OTHERS': {
+        'target': 0.03,
+        'codes': {'90', '93', '97', '98', '99'},
+    },
+    'WEATHER': {
+        'target': 1.60,
+        'codes': {'70', '71', '72', '73', '75', '76', '77'},
+    },
+    'REAC & MISC': {
+        'target': 1.00,
+        'codes': {'9', '14', '16', '25', '30', '91', '92'},
+    },
+    'DAMAGE ACFT': {
+        'target': 0.44,
+        'codes': {'50', '51', '52'},
+    },
+    'SYSTEMS': {
+        'target': 0.30,
+        'codes': {'55', '56', '57', '58'},
+    },
+}
+
+CODE_TO_ALOD_CATEGORY = {
+    code: cat
+    for cat, info in ALOD_CATEGORIES.items()
+    for code in info['codes']
+}
+
+
+def acceptable_level_of_delay(project_id: int, start_day: int = None, end_day: int = None) -> dict:
+    """
+    Acceptable Level of Delay (ALOD) Target vs Actual (Replika PowerBI).
+
+    Mengelompokkan frekuensi delay code GHP ke 9 kategori ALOD standar Citilink,
+    menghitung persentase kontribusi kasus delay aktual per kategori terhadap total kasus,
+    lalu membandingkannya dengan target ALOD per kategori.
+    Hasil diurutkan secara menurun berdasarkan persentase aktual.
+    """
+    flights = (filter_flights(project_id, start_day, end_day)
+               .exclude(delay_code__isnull=True).exclude(delay_code=''))
+
+    cat_counts = {c: 0 for c in ALOD_CATEGORIES}
+    cat_minutes = {c: 0 for c in ALOD_CATEGORIES}
+    total_flights = 0
+
+    for f in flights:
+        try:
+            items = parse_delay_breakdown(f.delay_code)
+        except ValueError:
+            continue
+        if not items:
+            continue
+
+        total_flights += 1
+        flight_cats = set()
+        for code, mins in items:
+            norm_code = str(int(code)) if code.isdigit() else str(code).strip()
+            cat = CODE_TO_ALOD_CATEGORY.get(norm_code, 'OTHERS')
+            cat_minutes[cat] += mins
+            flight_cats.add(cat)
+
+        for cat in flight_cats:
+            cat_counts[cat] += 1
+
+    total_cases = sum(cat_counts.values())
+    categories_data = []
+
+    for cat, info in ALOD_CATEGORIES.items():
+        cnt = cat_counts[cat]
+        if cnt == 0:
+            continue
+        actual_pct = round((cnt / total_cases * 100), 2) if total_cases > 0 else 0.0
+        categories_data.append({
+            'category': cat,
+            'cases': cnt,
+            'minutes': cat_minutes[cat],
+            'actual_percent': actual_pct,
+            'target_percent': info['target'],
+        })
+
+    # Urutkan menurun berdasarkan actual_percent (seperti tampilan PowerBI)
+    categories_data.sort(key=lambda x: (-x['actual_percent'], -x['cases'], -x['minutes']))
+    top_cat = categories_data[0] if categories_data else None
+
+    return {
+        'total_cases': total_cases,
+        'total_flights': total_flights,
+        'categories': categories_data,
+        'top_category': top_cat,
+    }
+
+

@@ -147,6 +147,26 @@
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
+                <div class="border-b border-base-350 flex items-center justify-between mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800 gap-2">
+                    <div class="min-w-0">
+                        <h2 class="font-semibold text-[15px] text-important truncate">Acceptable Level of Delay Target vs Actual</h2>
+                        <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark" id="alodCaption">Target vs Actual ALOD</span>
+                    </div>
+                    <!-- Callout Badge (PowerBI Top-Right Card Style) -->
+                    <div id="alodCalloutBadge" class="hidden sm:flex flex-col border-l-4 border-teal-500 pl-3 py-0.5 bg-base-50/70 dark:bg-base-800/40 rounded-r px-2.5 transition-all text-right">
+                        <div class="text-[11px] font-bold tracking-wide uppercase text-teal-700 dark:text-teal-400 truncate max-w-[150px]" id="alodBadgeCategory">-</div>
+                        <div class="flex items-center justify-end gap-2.5 text-xs mt-0.5">
+                            <span class="tabular-nums font-bold text-teal-600 dark:text-teal-400" id="alodBadgeActual">-%</span>
+                            <span class="text-font-subtle-light dark:text-font-subtle-dark">/</span>
+                            <span class="tabular-nums font-semibold text-blue-600 dark:text-blue-400" id="alodBadgeTarget">-%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-box" id="alodContainer">
+                    <canvas id="alodChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
                     <h2 class="font-semibold text-[15px] text-important">Rute Terbanyak dari SUB</h2>
                     <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">8 destinasi teratas</span>
@@ -170,6 +190,7 @@
         let delayCodeInstance = null;
         let pprpAchievementInstance = null;
         let routeDistInstance = null;
+        let alodInstance = null;
 
 
         // Warna: hijau Citilink untuk data aktual, abu-abu untuk konteks, merah hanya untuk delay.
@@ -623,6 +644,236 @@
             });
         }
 
+        // 7. Acceptable Level of Delay (ALOD) Target vs Actual Chart (Replika PowerBI)
+        function renderAlodChart(alodData) {
+            const container = document.getElementById('alodContainer');
+            const canvas = document.getElementById('alodChart');
+            const badge = document.getElementById('alodCalloutBadge');
+            const badgeCat = document.getElementById('alodBadgeCategory');
+            const badgeActual = document.getElementById('alodBadgeActual');
+            const badgeTarget = document.getElementById('alodBadgeTarget');
+            const caption = document.getElementById('alodCaption');
+
+            if (alodInstance) {
+                alodInstance.destroy();
+                alodInstance = null;
+            }
+
+            if (!alodData || !alodData.categories || alodData.categories.length === 0) {
+                canvas.style.display = 'none';
+                if (badge) badge.classList.add('hidden');
+                if (caption) caption.textContent = 'Belum ada data delay';
+                let empty = container.querySelector('.empty-placeholder');
+                if (!empty) {
+                    empty = document.createElement('div');
+                    empty.className = 'empty-placeholder';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">show_chart</span><p class="text-xs">Belum ada data ALOD pada periode ini.</p>';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+
+            const empty = container.querySelector('.empty-placeholder');
+            if (empty) empty.remove();
+            canvas.style.display = 'block';
+
+            if (caption) {
+                caption.textContent = `${alodData.total_cases} kasus (${alodData.total_flights} penerbangan)`;
+            }
+
+            const topCat = alodData.top_category || alodData.categories[0];
+            function updateBadge(catData) {
+                if (!badge || !catData) return;
+                badge.classList.remove('hidden');
+                badgeCat.textContent = catData.category;
+                badgeActual.textContent = Number(catData.actual_percent).toFixed(2) + '%';
+                badgeTarget.textContent = Number(catData.target_percent).toFixed(2) + '%';
+            }
+            updateBadge(topCat);
+
+            const labels = alodData.categories.map(c => c.category);
+            const actualValues = alodData.categories.map(c => c.actual_percent);
+            const targetValues = alodData.categories.map(c => c.target_percent);
+
+            const maxVal = Math.max(...actualValues, ...targetValues, 10);
+            const yMax = Math.ceil((maxVal * 1.25) / 10) * 10;
+
+            const ctx = canvas.getContext('2d');
+
+            // Warna persis tema PowerBI: Actual = Toska (#096B68), Target = Biru (#1D4ED8)
+            const C_ALOD_ACTUAL = '#096B68';
+            const C_ALOD_TARGET = '#1D4ED8';
+
+            const ABBR = {
+                'APT GOVERNMENTAL': 'APT GOV',
+                'FLT OPS & CREW': 'FLT OPS',
+                'STN HANDLING & CARGO': 'STN HDLG',
+                'TECHNICAL': 'TECHNICAL',
+                'OTHERS': 'OTHERS',
+                'WEATHER': 'WEATHER',
+                'REAC & MISC': 'REAC & MISC',
+                'DAMAGE ACFT': 'DAMAGE ACFT',
+                'SYSTEMS': 'SYSTEMS'
+            };
+
+            alodInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Actual',
+                            data: actualValues,
+                            borderColor: C_ALOD_ACTUAL,
+                            backgroundColor: 'rgba(9, 107, 104, 0.08)',
+                            pointBackgroundColor: C_ALOD_ACTUAL,
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 1.5,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            borderWidth: 2.5,
+                            tension: 0.1,
+                            fill: false,
+                        },
+                        {
+                            label: 'Target',
+                            data: targetValues,
+                            borderColor: C_ALOD_TARGET,
+                            backgroundColor: 'rgba(29, 78, 216, 0.06)',
+                            pointBackgroundColor: C_ALOD_TARGET,
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 1.5,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            borderWidth: 2,
+                            tension: 0.1,
+                            fill: false,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            top: 20,
+                            bottom: 6,
+                            left: 6,
+                            right: 12
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                boxWidth: 6,
+                                boxHeight: 6,
+                                padding: 12,
+                                font: { size: 11, weight: '500' }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: (items) => {
+                                    if (!items || !items.length) return '';
+                                    return items[0].label;
+                                },
+                                label: (context) => {
+                                    const dsLabel = context.dataset.label || '';
+                                    const val = context.parsed.y !== null ? Number(context.parsed.y).toFixed(2) + '%' : '-';
+                                    if (dsLabel === 'Actual') {
+                                        const catObj = alodData.categories[context.dataIndex];
+                                        const cases = catObj ? catObj.cases : 0;
+                                        const mins = catObj ? catObj.minutes : 0;
+                                        return `Actual: ${val} (${cases} kasus, ${mins}m)`;
+                                    }
+                                    return `Target: ${val}`;
+                                }
+                            }
+                        }
+                    },
+                    onHover: (event, elements) => {
+                        if (elements && elements.length > 0) {
+                            const idx = elements[0].index;
+                            if (alodData.categories[idx]) {
+                                updateBadge(alodData.categories[idx]);
+                            }
+                        } else {
+                            updateBadge(topCat);
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                maxRotation: 30,
+                                minRotation: 20,
+                                font: { size: 10, weight: '500' },
+                                callback: function(val, index) {
+                                    const original = this.getLabelForValue(val);
+                                    return ABBR[original] || (original.length > 10 ? original.slice(0, 9) + '…' : original);
+                                }
+                            }
+                        },
+                        y: {
+                            min: 0,
+                            max: yMax,
+                            title: {
+                                display: true,
+                                text: 'Delay(%)',
+                                color: C_GRAY,
+                                font: { size: 11, weight: '500' }
+                            },
+                            grid: {
+                                color: C_GRID,
+                                borderDash: [3, 3]
+                            },
+                            ticks: {
+                                callback: val => val + '%',
+                                font: { size: 10 }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    id: 'alodDataLabels',
+                    afterDatasetsDraw(chart) {
+                        const { ctx } = chart;
+                        ctx.save();
+                        ctx.font = '600 10px Inter, sans-serif';
+                        ctx.textAlign = 'center';
+
+                        chart.data.datasets.forEach((dataset, dIdx) => {
+                            const meta = chart.getDatasetMeta(dIdx);
+                            if (meta.hidden) return;
+
+                            meta.data.forEach((elem, idx) => {
+                                const val = dataset.data[idx];
+                                if (val === undefined || val === null) return;
+                                const text = Number(val).toFixed(2) + '%';
+                                if (dIdx === 0) {
+                                    ctx.fillStyle = C_ALOD_ACTUAL;
+                                    ctx.textBaseline = 'bottom';
+                                    ctx.fillText(text, elem.x, elem.y - 6);
+                                } else {
+                                    ctx.fillStyle = C_ALOD_TARGET;
+                                    ctx.textBaseline = 'top';
+                                    ctx.fillText(text, elem.x, elem.y + 6);
+                                }
+                            });
+                        });
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
         const startDaySelect = document.getElementById('startDaySelect');
         const endDaySelect = document.getElementById('endDaySelect');
 
@@ -666,6 +917,7 @@
                     renderDelayCodeChart(data.delay_data.case_counts, data.delay_data.total_flights);
                     renderPprpChart(data.pprp);
                     renderRouteDistChart(data.flight_dist);
+                    renderAlodChart(data.alod_data);
                 })
                 .catch(err => {
                     console.error('Dashboard API Error:', err);
