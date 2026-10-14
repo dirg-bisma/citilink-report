@@ -133,13 +133,19 @@
                     <h2 class="font-semibold text-[15px] text-important truncate">Acceptable Level of Delay Target vs Actual</h2>
                     <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark whitespace-nowrap pl-2" id="alodCaption">Target vs Actual ALOD</span>
                 </div>
-                <!-- Callout Badge (PowerBI Top-Right Card Style) -->
-                <div id="alodCalloutBadge" class="hidden sm:flex flex-col absolute top-20 right-8 border-l-4 border-teal-500 pl-3 py-1 bg-white/95 dark:bg-base-950/90 rounded-r shadow-xs backdrop-blur-xs transition-all text-right pointer-events-none z-10 border border-base-200 dark:border-base-800">
-                    <div class="text-[11px] font-bold tracking-wide uppercase text-teal-700 dark:text-teal-400 truncate max-w-[150px]" id="alodBadgeCategory">-</div>
-                    <div class="flex items-center justify-end gap-2.5 text-xs mt-0.5">
-                        <span class="tabular-nums font-bold text-teal-600 dark:text-teal-400" id="alodBadgeActual">-%</span>
-                        <span class="text-font-subtle-light dark:text-font-subtle-dark">/</span>
-                        <span class="tabular-nums font-semibold text-blue-600 dark:text-blue-400" id="alodBadgeTarget">-%</span>
+                <!-- Callout Badge (PowerBI Exact Style: Solid, Crisp, Spaced Columns, No Blur) -->
+                <div id="alodCalloutBadge" class="hidden sm:flex flex-col absolute top-[96px] right-6 border-l-4 border-teal-500 px-3.5 py-2 bg-white dark:bg-base-900 rounded-r-md shadow-xs transition-all pointer-events-none z-10 border border-base-200 dark:border-base-800">
+                    <div class="text-[11px] font-bold tracking-wider uppercase text-font-important-light dark:text-font-important-dark truncate" id="alodBadgeCategory">-</div>
+                    <div class="flex items-center gap-4 mt-1">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] uppercase tracking-wider text-font-subtle-light dark:text-font-subtle-dark font-semibold">Actual</span>
+                            <span class="text-xs font-bold text-teal-600 dark:text-teal-400 tabular-nums leading-tight" id="alodBadgeActual">-%</span>
+                        </div>
+                        <div class="h-5 w-px bg-base-300 dark:bg-base-700"></div>
+                        <div class="flex flex-col">
+                            <span class="text-[9px] uppercase tracking-wider text-font-subtle-light dark:text-font-subtle-dark font-semibold">Target</span>
+                            <span class="text-xs font-bold text-blue-600 dark:text-blue-400 tabular-nums leading-tight" id="alodBadgeTarget">-%</span>
+                        </div>
                     </div>
                 </div>
                 <div class="chart-box" id="alodContainer">
