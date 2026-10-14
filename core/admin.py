@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, Permission
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.shortcuts import redirect, render
@@ -22,10 +22,87 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
+    list_display = ['username', 'email', 'first_name', 'last_name', 'display_roles', 'is_staff', 'is_active']
+    list_filter = ['groups', 'is_staff', 'is_active', 'is_superuser']
+    actions = ['assign_operator', 'assign_station_manager', 'assign_viewer']
+
+    @display(description="Role / Grup")
+    def display_roles(self, obj):
+        badges = []
+        if obj.is_superuser:
+            badges.append(
+                '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300 mr-1">'
+                'Super Admin</span>'
+            )
+        groups = list(obj.groups.all())
+        if not groups and not obj.is_superuser:
+            return mark_safe(
+                '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300">'
+                'Tanpa Role</span>'
+            )
+        for g in groups:
+            if g.name == 'Station Manager':
+                color_class = "bg-green-100 text-[#006b32] dark:bg-green-950/50 dark:text-green-300 border border-green-200 dark:border-green-800"
+            elif g.name == 'Operator':
+                color_class = "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+            elif g.name == 'Management Viewer':
+                color_class = "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+            else:
+                color_class = "bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200"
+            badges.append(
+                f'<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold {color_class} mr-1">{g.name}</span>'
+            )
+        return mark_safe(''.join(badges))
+
+    @admin.action(description="Tetapkan role terpilih sebagai Operator")
+    def assign_operator(self, request, queryset):
+        grp = Group.objects.filter(name='Operator').first()
+        if grp:
+            for u in queryset:
+                u.groups.add(grp)
+            self.message_user(request, f"{queryset.count()} pengguna berhasil ditetapkan sebagai Operator.")
+
+    @admin.action(description="Tetapkan role terpilih sebagai Station Manager")
+    def assign_station_manager(self, request, queryset):
+        grp = Group.objects.filter(name='Station Manager').first()
+        if grp:
+            for u in queryset:
+                u.groups.add(grp)
+            self.message_user(request, f"{queryset.count()} pengguna berhasil ditetapkan sebagai Station Manager.")
+
+    @admin.action(description="Tetapkan role terpilih sebagai Management Viewer")
+    def assign_viewer(self, request, queryset):
+        grp = Group.objects.filter(name='Management Viewer').first()
+        if grp:
+            for u in queryset:
+                u.groups.add(grp)
+            self.message_user(request, f"{queryset.count()} pengguna berhasil ditetapkan sebagai Management Viewer.")
 
 @admin.register(Group)
 class GroupAdmin(BaseGroupAdmin, ModelAdmin):
-    pass
+    list_display = ['name', 'display_user_count', 'display_permissions_summary']
+
+    @display(description="Jumlah Pengguna")
+    def display_user_count(self, obj):
+        count = obj.user_set.count()
+        return format_html(
+            '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-base-100 text-font-important-light dark:bg-base-800 dark:text-font-important-dark">{} Pengguna</span>',
+            count
+        )
+
+    @display(description="Ringkasan Privilege")
+    def display_permissions_summary(self, obj):
+        count = obj.permissions.count()
+        core_count = obj.permissions.filter(content_type__app_label='core').count()
+        auth_count = obj.permissions.filter(content_type__app_label='auth').count()
+        return f"{count} hak akses aktif ({core_count} Operasional, {auth_count} Administrasi)"
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "permissions":
+            kwargs["queryset"] = Permission.objects.filter(
+                content_type__app_label__in=['core', 'auth']
+            ).select_related('content_type')
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
 from django.utils.html import format_html
@@ -100,6 +177,9 @@ class ProjectAdmin(ModelAdmin):
     def upload_pprp_view(self, request, project_id):
         # Pintu yang sama dengan halaman Upload Data (core.ingest): semua file
         # diproses satu per satu, hasil per file dilaporkan, GHP disinkronkan ulang.
+        if not request.user.has_perm('core.add_sourcefile'):
+            return JsonResponse({'success': False, 'message': 'Anda tidak memiliki izin untuk mengunggah file PPRP.'}, status=403)
+
         if request.method != 'POST':
             return JsonResponse({'success': False, 'message': 'Method POST required.'}, status=405)
 
@@ -120,6 +200,10 @@ class ProjectAdmin(ModelAdmin):
         return JsonResponse(result.as_dict(), status=200 if result.success else 400)
 
     def download_report(self, request, project_id):
+        if not request.user.has_perm('core.view_project'):
+            self.message_user(request, "Anda tidak memiliki izin untuk mengunduh laporan ini.", level='error')
+            from django.shortcuts import redirect
+            return redirect('/admin/core/project/')
         import tempfile
         try:
             project = Project.objects.get(id=project_id)
@@ -144,6 +228,10 @@ class ProjectAdmin(ModelAdmin):
             return redirect(f'/admin/core/project/')
 
     def download_rekap_view(self, request):
+        if not request.user.has_perm('core.view_project'):
+            self.message_user(request, "Anda tidak memiliki izin untuk mengunduh laporan rekap.", level='error')
+            from django.shortcuts import redirect
+            return redirect('/admin/core/project/')
         import tempfile
         try:
             with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
@@ -176,6 +264,9 @@ class SourceFileAdmin(ModelAdmin):
 
     @admin.action(description='Sinkronkan ulang bulan file terpilih (surat PPRP + GHP)')
     def resync_months(self, request, queryset):
+        if not request.user.has_perm('core.change_sourcefile'):
+            self.message_user(request, "Anda tidak memiliki izin untuk melakukan sinkronisasi ulang data.", level='error')
+            return
         # Dulu aksi ini memanggil parser langsung ("Process selected files")
         # tanpa validasi dan tanpa sinkronisasi turunan — pintu ketiga yang
         # bisa membuat jadwal dobel. Sekarang memakai jalur yang sama dengan
