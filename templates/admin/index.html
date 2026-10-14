@@ -110,7 +110,7 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
+            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6 lg:col-span-2">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
                     <h2 class="font-semibold text-[15px] text-important">OTP Harian: Target vs Aktual</h2>
                     <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Target 90%</span>
@@ -128,13 +128,22 @@
                     <canvas id="pprpAchievementChart"></canvas>
                 </div>
             </div>
-            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
+            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6 relative">
                 <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
-                    <h2 class="font-semibold text-[15px] text-important">Delay Code Terbanyak</h2>
-                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark" id="delayCodeCaption">-</span>
+                    <h2 class="font-semibold text-[15px] text-important truncate">Acceptable Level of Delay Target vs Actual</h2>
+                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark whitespace-nowrap pl-2" id="alodCaption">Target vs Actual ALOD</span>
                 </div>
-                <div class="chart-box" id="delayCodeContainer">
-                    <canvas id="delayCodeChart"></canvas>
+                <!-- Callout Badge (PowerBI Top-Right Card Style) -->
+                <div id="alodCalloutBadge" class="hidden sm:flex flex-col absolute top-20 right-8 border-l-4 border-teal-500 pl-3 py-1 bg-white/95 dark:bg-base-950/90 rounded-r shadow-xs backdrop-blur-xs transition-all text-right pointer-events-none z-10 border border-base-200 dark:border-base-800">
+                    <div class="text-[11px] font-bold tracking-wide uppercase text-teal-700 dark:text-teal-400 truncate max-w-[150px]" id="alodBadgeCategory">-</div>
+                    <div class="flex items-center justify-end gap-2.5 text-xs mt-0.5">
+                        <span class="tabular-nums font-bold text-teal-600 dark:text-teal-400" id="alodBadgeActual">-%</span>
+                        <span class="text-font-subtle-light dark:text-font-subtle-dark">/</span>
+                        <span class="tabular-nums font-semibold text-blue-600 dark:text-blue-400" id="alodBadgeTarget">-%</span>
+                    </div>
+                </div>
+                <div class="chart-box" id="alodContainer">
+                    <canvas id="alodChart"></canvas>
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
@@ -147,23 +156,12 @@
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
-                <div class="border-b border-base-350 flex items-center justify-between mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800 gap-2">
-                    <div class="min-w-0">
-                        <h2 class="font-semibold text-[15px] text-important truncate">Acceptable Level of Delay Target vs Actual</h2>
-                        <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark" id="alodCaption">Target vs Actual ALOD</span>
-                    </div>
-                    <!-- Callout Badge (PowerBI Top-Right Card Style) -->
-                    <div id="alodCalloutBadge" class="hidden sm:flex flex-col border-l-4 border-teal-500 pl-3 py-0.5 bg-base-50/70 dark:bg-base-800/40 rounded-r px-2.5 transition-all text-right">
-                        <div class="text-[11px] font-bold tracking-wide uppercase text-teal-700 dark:text-teal-400 truncate max-w-[150px]" id="alodBadgeCategory">-</div>
-                        <div class="flex items-center justify-end gap-2.5 text-xs mt-0.5">
-                            <span class="tabular-nums font-bold text-teal-600 dark:text-teal-400" id="alodBadgeActual">-%</span>
-                            <span class="text-font-subtle-light dark:text-font-subtle-dark">/</span>
-                            <span class="tabular-nums font-semibold text-blue-600 dark:text-blue-400" id="alodBadgeTarget">-%</span>
-                        </div>
-                    </div>
+                <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
+                    <h2 class="font-semibold text-[15px] text-important">Delay Code Terbanyak</h2>
+                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark" id="delayCodeCaption">-</span>
                 </div>
-                <div class="chart-box" id="alodContainer">
-                    <canvas id="alodChart"></canvas>
+                <div class="chart-box" id="delayCodeContainer">
+                    <canvas id="delayCodeChart"></canvas>
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
