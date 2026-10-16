@@ -136,3 +136,12 @@ class RBACTestCase(TestCase):
 
         summary_display = group_admin.display_permissions_summary(sm_group)
         self.assertIn('hak akses aktif', summary_display)
+
+        # Custom permission label formatting check
+        req = MockRequest(self.admin_user)
+        req.method = 'GET'
+        field = group_admin.formfield_for_manytomany(Group._meta.get_field('permissions'), req)
+        perm = Permission.objects.get(
+            content_type__app_label='core', content_type__model='sourcefile', codename='add_sourcefile'
+        )
+        self.assertEqual(field.label_from_instance(perm), 'Reference Documents | Can upload reference files (WTT/PPRP/GHP)')

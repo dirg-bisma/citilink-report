@@ -152,8 +152,9 @@ from django.urls import reverse_lazy
 
 UNFOLD = {
     "STYLES": [
-        lambda request: "/static/css/unfold_override.css?v=7",
+        lambda request: "/static/css/unfold_override.css?v=8",
     ],
+    "SCRIPTS": [],
     "SITE_TITLE": "CITILINK AVIOR",
     "SITE_HEADER": "CITILINK AVIOR",
     "SITE_SUBHEADER": "AViation Operations Report",

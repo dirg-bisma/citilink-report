@@ -84,18 +84,10 @@
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
                 <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">On Time</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-font-important-light dark:text-font-important-dark" id="valOnTime">-</h3>
+                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-font-important-light dark:text-font-important-dark">
+                    <span id="valOnTime">-</span> <span class="text-[14px] font-normal text-font-subtle-light dark:text-font-subtle-dark">flight</span>
+                </h3>
                 <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Tepat Waktu</p>
-            </div>
-            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Delay</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-red-600 dark:text-red-400" id="valDelay">-</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Terlambat &gt; 15 min</p>
-            </div>
-            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">OTP</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-primary-600 dark:text-primary-400" id="valOtpDep">-%</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Target 90% (Dep)</p>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
                 <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Realisasi PPRP</p>
@@ -103,9 +95,21 @@
                 <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Target 100% (&le; 45m)</p>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
-                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Total Durasi Delay</p>
-                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-red-600 dark:text-red-400" id="valDelayDuration">-</h3>
-                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Total Jam:Menit</p>
+                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Pencapaian PPRP</p>
+                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-primary-600 dark:text-primary-400" id="valPprpPlan">-%</h3>
+                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Target 100% (Rencana)</p>
+            </div>
+            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
+                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">OTP</p>
+                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-primary-600 dark:text-primary-400" id="valOtpDep">-%</h3>
+                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Target 90% (Dep)</p>
+            </div>
+            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-4">
+                <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Delay</p>
+                <h3 class="text-2xl font-semibold mt-1 tabular-nums text-red-600 dark:text-red-400">
+                    <span id="valDelay">-</span> <span class="text-[14px] font-normal text-font-subtle-light dark:text-font-subtle-dark">flight</span>
+                </h3>
+                <p class="text-xs text-font-subtle-light dark:text-font-subtle-dark mt-2">Terlambat &gt; 15 min</p>
             </div>
         </div>
 
@@ -126,6 +130,15 @@
                 </div>
                 <div class="chart-box" id="pprpAchievementContainer">
                     <canvas id="pprpAchievementChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6">
+                <div class="border-b border-base-350 flex items-center mb-6 -mt-6 -mx-6 py-4 px-6 dark:border-base-800">
+                    <h2 class="font-semibold text-[15px] text-important">Pencapaian PPRP (Target Rencana)</h2>
+                    <span class="ml-auto text-sm text-font-subtle-light dark:text-font-subtle-dark">Target 100%</span>
+                </div>
+                <div class="chart-box" id="pprpPlanContainer">
+                    <canvas id="pprpPlanChart"></canvas>
                 </div>
             </div>
             <div class="bg-white border border-base-350 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 p-6 relative">
@@ -193,6 +206,7 @@
         let delayDurationInstance = null;
         let delayCodeInstance = null;
         let pprpAchievementInstance = null;
+        let pprpPlanInstance = null;
         let routeDistInstance = null;
         let alodInstance = null;
 
@@ -215,9 +229,12 @@
             document.getElementById('badgeChrt').textContent = `CHRT/XTRA: ${data.otp.chrt_count}`;
             document.getElementById('valOnTime').textContent = data.otp.on_time.toLocaleString();
             document.getElementById('valDelay').textContent = data.otp.delayed.toLocaleString();
-            document.getElementById('valDelayDuration').textContent = (data.delay_data && data.delay_data.total_duration_str) || '0j 00m';
             document.getElementById('valOtpDep').textContent = data.otp.otp_percent + '%';
             document.getElementById('valPprp').textContent = ((data.pprp && data.pprp.achievement !== undefined) ? data.pprp.achievement : 0) + '%';
+            const elPprpPlan = document.getElementById('valPprpPlan');
+            if (elPprpPlan) {
+                elPprpPlan.textContent = ((data.pprp_plan && data.pprp_plan.achievement !== undefined) ? data.pprp_plan.achievement : 0) + '%';
+            }
         }
 
         // 1. Daily OTP Trend Chart (Combo Line + Bar)
@@ -536,6 +553,130 @@
                     datasets: [{
                         data: [onTime, outOfTol],
                         backgroundColor: [C_GREEN, C_GRAY_2],
+                        borderWidth: 0,
+                        hoverOffset: 6
+                    }]
+                },
+                plugins: [centerTextPlugin],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '72%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: C_GRAY,
+                                font: { size: 11, weight: '500' },
+                                usePointStyle: true,
+                                boxWidth: 8,
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    if (data.labels.length && data.datasets.length) {
+                                        const dataset = data.datasets[0];
+                                        const total = dataset.data.reduce((a, b) => a + b, 0);
+                                        const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+                                        const legendTextColor = isDark ? '#94a3b8' : '#64748b';
+                                        return data.labels.map((label, i) => {
+                                            const val = dataset.data[i];
+                                            const pct = total > 0 ? (val / total * 100).toFixed(1) : 0;
+                                            return {
+                                                text: `${label}: ${pct}%`,
+                                                fillStyle: dataset.backgroundColor[i],
+                                                strokeStyle: dataset.backgroundColor[i],
+                                                lineWidth: 0,
+                                                pointStyle: 'circle',
+                                                hidden: !chart.getDataVisibility(i),
+                                                index: i,
+                                                fontColor: legendTextColor
+                                            };
+                                        });
+                                    }
+                                    return [];
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
+                                    return ` ${ctx.label}: ${ctx.parsed} flight (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 5b. PPRP Plan Achievement Donut Chart (3 Variables: In Tolerance, Out of Tolerance, NOOP)
+        function renderPprpPlanChart(pprpPlanData) {
+            const container = document.getElementById('pprpPlanContainer');
+            if (!container) return;
+            const canvas = document.getElementById('pprpPlanChart');
+
+            if (pprpPlanInstance) {
+                pprpPlanInstance.destroy();
+                pprpPlanInstance = null;
+            }
+
+            if (!pprpPlanData || pprpPlanData.total === 0) {
+                canvas.style.display = 'none';
+                let empty = container.querySelector('.empty-placeholder');
+                if (!empty) {
+                    empty = document.createElement('div');
+                    empty.className = 'empty-placeholder';
+                    empty.innerHTML = '<span class="material-symbols-outlined text-3xl mb-1 opacity-50">verified</span><p class="text-xs">Data Pencapaian PPRP belum tersedia.</p>';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+
+            const empty = container.querySelector('.empty-placeholder');
+            if (empty) empty.remove();
+            canvas.style.display = 'block';
+
+            const onTime = pprpPlanData.on_time;
+            const outOfTol = pprpPlanData.out_of_tolerance;
+            const noop = pprpPlanData.noop;
+            const achievement = pprpPlanData.achievement;
+
+            const centerTextPlugin = {
+                id: 'pprpPlanCenterText',
+                beforeDraw(chart) {
+                    const meta = chart.getDatasetMeta(0);
+                    if (!meta || !meta.data || !meta.data.length) return;
+                    const x = meta.data[0].x || ((chart.chartArea.left + chart.chartArea.right) / 2);
+                    const y = meta.data[0].y || ((chart.chartArea.top + chart.chartArea.bottom) / 2);
+
+                    const { ctx } = chart;
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+
+                    ctx.font = '700 26px Inter, sans-serif';
+                    ctx.fillStyle = isDark ? '#f1f5f9' : '#0f172a';
+                    ctx.fillText(`${achievement}%`, x, y - 9);
+
+                    ctx.font = '500 12px Inter, sans-serif';
+                    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+                    ctx.fillText('Tercapai', x, y + 14);
+
+                    ctx.restore();
+                }
+            };
+
+            const ctx = canvas.getContext('2d');
+            pprpPlanInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Dalam toleransi (≤45 menit)', 'Di luar toleransi (>45 menit)', 'NOOP (Tidak Terbang)'],
+                    datasets: [{
+                        data: [onTime, outOfTol, noop],
+                        backgroundColor: [C_GREEN, C_GRAY, C_GRAY_2],
                         borderWidth: 0,
                         hoverOffset: 6
                     }]
@@ -920,6 +1061,7 @@
                     renderDelayDurationChart(data.delay_data.durations);
                     renderDelayCodeChart(data.delay_data.case_counts, data.delay_data.total_flights);
                     renderPprpChart(data.pprp);
+                    renderPprpPlanChart(data.pprp_plan);
                     renderRouteDistChart(data.flight_dist);
                     renderAlodChart(data.alod_data);
                 })

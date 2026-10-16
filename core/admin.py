@@ -17,6 +17,50 @@ import os
 admin.site.unregister(User)
 admin.site.unregister(Group)
 
+from django.utils.safestring import mark_safe
+
+# Custom permission display labels for Citilink AVIOR RBAC
+PERMISSION_DISPLAY_LABELS = {
+    # Reference Documents (core.sourcefile)
+    ('core', 'sourcefile', 'view_sourcefile'): 'Reference Documents | Can view uploaded files history',
+    ('core', 'sourcefile', 'add_sourcefile'): 'Reference Documents | Can upload reference files (WTT/PPRP/GHP)',
+    ('core', 'sourcefile', 'change_sourcefile'): 'Reference Documents | Can resynchronize flight schedules (Resync)',
+    ('core', 'sourcefile', 'delete_sourcefile'): 'Reference Documents | Can delete uploaded files',
+
+    # Flight Schedules (core.scheduleversion)
+    ('core', 'scheduleversion', 'view_scheduleversion'): 'Flight Schedules | Can view flight schedule & OTP records',
+    ('core', 'scheduleversion', 'change_scheduleversion'): 'Flight Schedules | Can edit flight schedule records',
+    ('core', 'scheduleversion', 'add_scheduleversion'): 'Flight Schedules | Can add raw flight schedule records',
+    ('core', 'scheduleversion', 'delete_scheduleversion'): 'Flight Schedules | Can delete raw flight schedule records',
+
+    # Flight Periods (core.project)
+    ('core', 'project', 'view_project'): 'Flight Periods | Can view flight periods & OTP reports',
+    ('core', 'project', 'add_project'): 'Flight Periods | Can create new flight period',
+    ('core', 'project', 'change_project'): 'Flight Periods | Can edit flight period details',
+    ('core', 'project', 'delete_project'): 'Flight Periods | Can delete flight period',
+
+    # User Accounts (auth.user)
+    ('auth', 'user', 'view_user'): 'User Accounts | Can view staff accounts',
+    ('auth', 'user', 'add_user'): 'User Accounts | Can create new staff account',
+    ('auth', 'user', 'change_user'): 'User Accounts | Can edit staff accounts & permissions',
+    ('auth', 'user', 'delete_user'): 'User Accounts | Can delete staff account',
+
+    # User Roles (auth.group)
+    ('auth', 'group', 'view_group'): 'User Roles | Can view user roles & groups',
+    ('auth', 'group', 'add_group'): 'User Roles | Can create new user role',
+    ('auth', 'group', 'change_group'): 'User Roles | Can edit user roles & permissions',
+    ('auth', 'group', 'delete_group'): 'User Roles | Can delete user role',
+}
+
+
+def format_permission_label(perm):
+    key = (perm.content_type.app_label, perm.content_type.model, perm.codename)
+    if key in PERMISSION_DISPLAY_LABELS:
+        return PERMISSION_DISPLAY_LABELS[key]
+    model_name = perm.content_type.model.replace('_', ' ').title()
+    return f"{model_name} | {perm.name}"
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin, ModelAdmin):
     form = UserChangeForm
@@ -78,6 +122,18 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
                 u.groups.add(grp)
             self.message_user(request, f"{queryset.count()} pengguna berhasil ditetapkan sebagai Management Viewer.")
 
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "user_permissions":
+            kwargs["queryset"] = Permission.objects.filter(
+                content_type__app_label__in=['core', 'auth']
+            ).exclude(content_type__model='permission').select_related('content_type')
+        field = super().formfield_for_manytomany(db_field, request, **kwargs)
+        if db_field.name == "user_permissions" and field:
+            field.label_from_instance = format_permission_label
+            field.help_text = "Pilih hak akses di kolom kiri dan klik tombol panah (>) untuk menambahkan, atau pilih di kolom kanan dan klik panah (<) untuk menghapus."
+        return field
+
+
 @admin.register(Group)
 class GroupAdmin(BaseGroupAdmin, ModelAdmin):
     list_display = ['name', 'display_user_count', 'display_permissions_summary']
@@ -101,8 +157,12 @@ class GroupAdmin(BaseGroupAdmin, ModelAdmin):
         if db_field.name == "permissions":
             kwargs["queryset"] = Permission.objects.filter(
                 content_type__app_label__in=['core', 'auth']
-            ).select_related('content_type')
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
+            ).exclude(content_type__model='permission').select_related('content_type')
+        field = super().formfield_for_manytomany(db_field, request, **kwargs)
+        if db_field.name == "permissions" and field:
+            field.label_from_instance = format_permission_label
+            field.help_text = "Pilih hak akses di kolom kiri dan klik tombol panah (>) untuk menambahkan, atau pilih di kolom kanan dan klik panah (<) untuk menghapus."
+        return field
 
 
 from django.utils.html import format_html

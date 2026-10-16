@@ -114,3 +114,65 @@ class ALODTests(TestCase):
         self.assertEqual(len(json_data['alod_data']['categories']), 1)
         self.assertEqual(json_data['alod_data']['categories'][0]['category'], 'APT GOVERNMENTAL')
 
+
+class PPRPPlanAchievementTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user('tester_pprp', 'tester_pprp@example.com', 'x', is_staff=True)
+        cls.project = Project.objects.create(project_id='PRJ-202609', period='2026-09', year=2026, month=9,
+                                             created_by=cls.user)
+
+    def test_pprp_plan_achievement_calculation(self):
+        from core.analytics import pprp_plan_achievement
+
+        # Flight 1: Operated on-time (within <= 45 min)
+        ScheduleVersion.objects.create(
+            project=self.project, flight_number='QG101', origin='SUB', destination='CGK',
+            flight_date=date(2026, 9, 1), is_active=True, operational_flag=True,
+            std=time(8, 0), atd=time(8, 20)
+        )
+        # Flight 2: Operated out of tolerance (> 45 min)
+        ScheduleVersion.objects.create(
+            project=self.project, flight_number='QG102', origin='SUB', destination='DPS',
+            flight_date=date(2026, 9, 1), is_active=True, operational_flag=True,
+            std=time(8, 0), atd=time(8, 55)
+        )
+        # Flight 3: Scheduled but NOOP (operational_flag=False)
+        ScheduleVersion.objects.create(
+            project=self.project, flight_number='QG103', origin='SUB', destination='KNO',
+            flight_date=date(2026, 9, 1), is_active=True, operational_flag=False,
+            std=time(9, 0)
+        )
+        # Flight 4: Inactive superseded record (should be ignored)
+        ScheduleVersion.objects.create(
+            project=self.project, flight_number='QG101', origin='SUB', destination='CGK',
+            flight_date=date(2026, 9, 1), is_active=False, operational_flag=True,
+            std=time(7, 0)
+        )
+
+        res = pprp_plan_achievement(self.project.id, self.project.month)
+        self.assertEqual(res['total'], 3)
+        self.assertEqual(res['on_time'], 1)
+        self.assertEqual(res['out_of_tolerance'], 1)
+        self.assertEqual(res['noop'], 1)
+        # 1 / 3 = 33.33%
+        self.assertEqual(res['achievement'], 33.33)
+
+    def test_dashboard_api_returns_pprp_plan(self):
+        self.client.force_login(self.user)
+        ScheduleVersion.objects.create(
+            project=self.project, flight_number='QG101', origin='SUB', destination='CGK',
+            flight_date=date(2026, 9, 1), is_active=True, operational_flag=True,
+            std=time(8, 0), atd=time(8, 10)
+        )
+        resp = self.client.get(f'/admin/api/dashboard/?project_id={self.project.id}')
+        self.assertEqual(resp.status_code, 200)
+        json_data = resp.json()
+        self.assertIn('pprp_plan', json_data)
+        plan = json_data['pprp_plan']
+        self.assertEqual(plan['total'], 1)
+        self.assertEqual(plan['on_time'], 1)
+        self.assertEqual(plan['noop'], 0)
+        self.assertEqual(plan['achievement'], 100.0)
+
+

@@ -102,3 +102,21 @@ body.login input[type="password"] {
         transition: none;
     }
 }
+
+/* --- Permission Filter Widget Enhancements ---
+   Beri ruang lebih lebar agar nama permission operasional tidak terpotong (ellipsis). */
+.selector-chosen,
+.selector-available {
+    min-width: 24rem;
+}
+@media (min-width: 1024px) {
+    .selector-chosen,
+    .selector-available {
+        width: 32rem;
+    }
+}
+.selector option {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    line-height: 1.4;
+}

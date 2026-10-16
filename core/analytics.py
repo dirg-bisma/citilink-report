@@ -29,6 +29,20 @@ def filter_flights(project_id: int, start_day: int = None, end_day: int = None):
     return qs
 
 
+def filter_planned_flights(project_id: int, start_day: int = None, end_day: int = None):
+    """Helper to query ScheduleVersion filtered by project, SUB origin, is_active=True, and date range (planned flights including NOOP)"""
+    qs = ScheduleVersion.objects.filter(
+        project_id=project_id,
+        origin='SUB',
+        is_active=True,
+    )
+    if start_day is not None and start_day > 0:
+        qs = qs.filter(flight_date__day__gte=start_day)
+    if end_day is not None and end_day > 0:
+        qs = qs.filter(flight_date__day__lte=end_day)
+    return qs
+
+
 def otp_metric(project_id: int, start_day: int = None, end_day: int = None) -> dict:
     """OTP Departure & Arrival metrics with OTP-15 tolerance standard (15 minutes)"""
     flights = filter_flights(project_id, start_day, end_day)
@@ -165,6 +179,46 @@ def pprp_achievement(project_id: int, month: int, start_day: int = None, end_day
         'achievement': round(on_time / total * 100, 2),
         'total': total,
         'on_time': on_time,
+    }
+
+
+def pprp_plan_achievement(project_id: int, month: int, start_day: int = None, end_day: int = None) -> dict:
+    """Pencapaian PPRP berdasarkan perencanaan (WTT/Surat PPRP), memperhitungkan NOOP sebagai tidak tercapai (3 variabel)"""
+    flights = filter_planned_flights(project_id, start_day, end_day)
+    
+    total = flights.count()
+    if total == 0:
+        return {'achievement': 0, 'total': 0, 'on_time': 0, 'out_of_tolerance': 0, 'noop': 0}
+    
+    on_time = 0
+    out_of_tol = 0
+    noop = 0
+    for f in flights:
+        if not f.operational_flag:
+            noop += 1
+        else:
+            # Jam GHP untuk dashboard; fallback kolom lama untuk data legacy.
+            g_std = f.ghp_std or f.std
+            g_atd = f.ghp_atd or f.atd
+            if g_std and g_atd:
+                std_min = g_std.hour * 60 + g_std.minute
+                atd_min = g_atd.hour * 60 + g_atd.minute
+                diff = atd_min - std_min
+                if diff < -720: diff += 1440
+                elif diff > 720: diff -= 1440
+                if abs(diff) <= 45:
+                    on_time += 1
+                else:
+                    out_of_tol += 1
+            else:
+                out_of_tol += 1
+    
+    return {
+        'achievement': round(on_time / total * 100, 2),
+        'total': total,
+        'on_time': on_time,
+        'out_of_tolerance': out_of_tol,
+        'noop': noop,
     }
 
 

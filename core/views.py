@@ -155,7 +155,7 @@ def upload_source_file_view(request):
 def global_dashboard_api(request):
     """API endpoint for global dashboard - returns analytics data for a given project and optional date range."""
     from core.analytics import (
-        otp_metric, pprp_achievement, delay_factors,
+        otp_metric, pprp_achievement, pprp_plan_achievement, delay_factors,
         daily_otp_trend, flight_distribution, acceptable_level_of_delay
     )
 
@@ -192,6 +192,7 @@ def global_dashboard_api(request):
     # Compute analytics
     otp_data = {'total': 0, 'reg_count': 0, 'chrt_count': 0, 'on_time': 0, 'delayed': 0, 'otp_percent': 0, 'otp_arr_percent': 0, 'avg_agt': '-', 'avg_sgt': '-'}
     pprp_data = {'achievement': 0, 'total': 0, 'on_time': 0}
+    pprp_plan_data = {'achievement': 0, 'total': 0, 'on_time': 0, 'out_of_tolerance': 0, 'noop': 0}
     delay_data = {'case_counts': [], 'durations': [], 'total_flights': 0, 'total_delay_minutes': 0, 'total_duration_str': '0j 00m'}
     alod_data = {'total_cases': 0, 'total_flights': 0, 'categories': [], 'top_category': None}
     daily_trend = []
@@ -202,6 +203,7 @@ def global_dashboard_api(request):
             project = Project.objects.get(id=project_id)
             otp_data = otp_metric(project_id, start_day, end_day)
             pprp_data = pprp_achievement(project_id, project.month, start_day, end_day)
+            pprp_plan_data = pprp_plan_achievement(project_id, project.month, start_day, end_day)
             delay_data = delay_factors(project_id, start_day, end_day)
             alod_data = acceptable_level_of_delay(project_id, start_day, end_day)
             daily_trend = daily_otp_trend(project_id, start_day, end_day)
@@ -221,6 +223,7 @@ def global_dashboard_api(request):
             **pprp_data,
             'out_of_tolerance': pprp_out,
         },
+        'pprp_plan': pprp_plan_data,
         'delay_data': delay_data,
         'alod_data': alod_data,
         'daily_trend': daily_trend,
