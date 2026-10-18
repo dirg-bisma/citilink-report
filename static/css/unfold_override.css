@@ -103,6 +103,36 @@ body.login input[type="password"] {
     }
 }
 
+/* --- Sidebar Pinned Footer (Profil & Logout selalu di dasar layar) ---
+   Mencegah seluruh sidebar ter-scroll di layar HP (mobile).
+   Hanya daftar menu di tengah (#nav-sidebar-apps) yang digulir,
+   sehingga kartu profil & tombol logout selalu terlihat di bawah tanpa scrolling. */
+#nav-sidebar {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden !important;
+}
+
+#nav-sidebar-inner {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+#nav-sidebar-apps {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+#nav-sidebar-inner > div:not(#nav-sidebar-apps) {
+    flex-shrink: 0 !important;
+}
+
 /* --- Permission Filter Widget Enhancements ---
    Beri ruang lebih lebar agar nama permission operasional tidak terpotong (ellipsis). */
 .selector-chosen,
