@@ -20,6 +20,7 @@ media/
 .vscode/
 .idea/
 *.xlsx
+!static/tpl/*.xlsx
 /test_*.py
 *.sql
 login.html

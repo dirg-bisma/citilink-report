@@ -210,7 +210,14 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('Gagal mengunduh rekap. Status: ' + response.status);
+                    const errText = await response.text();
+                    throw new Error('Gagal mengunduh rekap: ' + (errText || response.status));
+                }
+
+                // Check content type
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('text/html')) {
+                    throw new Error('Gagal mengunduh rekap: Server mengembalikan halaman web, bukan file Excel.');
                 }
 
                 // Check content type or disposition

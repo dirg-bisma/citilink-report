@@ -305,10 +305,16 @@ class ProjectAdmin(ModelAdmin):
             )
             return response
         except ValueError as e:
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'text/html' not in request.headers.get('accept', ''):
+                from django.http import HttpResponse
+                return HttpResponse(str(e), status=400)
             self.message_user(request, str(e), level='warning')
             from django.shortcuts import redirect
             return redirect(f'/admin/core/project/')
         except Exception as e:
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'text/html' not in request.headers.get('accept', ''):
+                from django.http import HttpResponse
+                return HttpResponse(f"Gagal generate rekap: {e}", status=500)
             self.message_user(request, f"Gagal generate rekap: {e}", level='error')
             from django.shortcuts import redirect
             return redirect(f'/admin/core/project/')

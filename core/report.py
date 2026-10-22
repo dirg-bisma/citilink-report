@@ -173,6 +173,45 @@ def resolve_daily_cell(day, periode, days_of_week, ghp_actual, flight_norm):
     return 1 if (flight_norm, day) in ghp_actual['flown'] else 0
 
 
+def _resolve_path(path: str) -> str:
+    """
+    Fallback ke MEDIA_ROOT jika path fisik yang tercatat di DB (mis. path Windows E:\\...)
+    tidak ditemukan pada lingkungan server (Linux/Docker /app/media).
+    """
+    if not path:
+        return ""
+    if os.path.exists(path):
+        return path
+    from django.conf import settings
+    fname = os.path.basename(path.replace('\\', '/'))
+    c1 = os.path.join(settings.MEDIA_ROOT, 'uploads', fname)
+    if os.path.exists(c1):
+        return c1
+    c2 = os.path.join(settings.MEDIA_ROOT, fname)
+    if os.path.exists(c2):
+        return c2
+    return path
+
+
+def _resolve_template_path(path: str = None) -> str:
+    """Cari template Excel form_realisasi_winter26.xlsx dari beberapa kemungkinan lokasi (static, media, dsb)."""
+    candidates = []
+    if path:
+        candidates.append(_resolve_path(path))
+    from django.conf import settings
+    candidates.extend([
+        os.path.join(settings.BASE_DIR, 'static', 'tpl', 'form_realisasi_winter26.xlsx'),
+        os.path.join(settings.STATIC_ROOT, 'tpl', 'form_realisasi_winter26.xlsx'),
+        os.path.join(settings.MEDIA_ROOT, 'uploads', 'form_realisasi_winter26.xlsx'),
+        os.path.join(settings.MEDIA_ROOT, 'form_realisasi_winter26.xlsx'),
+        os.path.join('static', 'tpl', 'form_realisasi_winter26.xlsx'),
+    ])
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return ""
+
+
 def _load_ghp_actual(projects):
     """
     Baca realisasi langsung dari file-file GHP project yang diberikan:
@@ -187,11 +226,12 @@ def _load_ghp_actual(projects):
     for project in projects:
         files = SourceFile.objects.filter(project=project, file_type='GHP', status='SUCCESS').order_by('uploaded_at', 'id')
         for sf in files:
-            if not sf.file_path or not os.path.exists(sf.file_path):
+            fpath = _resolve_path(sf.file_path)
+            if not fpath or not os.path.exists(fpath):
                 continue
-            rng = detect_ghp_range(sf.file_path)
+            rng = detect_ghp_range(fpath)
             dates = set()
-            for rec in parse_ghp(sf.file_path, year=project.year):
+            for rec in parse_ghp(fpath, year=project.year):
                 if rec.get('origin') != 'SUB' or is_charter_flight(rec['flight_number']):
                     continue
                 try:
@@ -204,6 +244,24 @@ def _load_ghp_actual(projects):
                 coverage.append(rng)
             elif dates:
                 coverage.append((min(dates), max(dates)))
+
+        # Fallback: jika file fisik GHP tidak ditemukan di disk (misal database di-copy
+        # ke server tapi folder media belum), baca langsung realisasi operasional dari
+        # ScheduleVersion di database yang sudah diproses sebelumnya.
+        if not coverage:
+            schedules = ScheduleVersion.objects.filter(project=project, is_active=True)
+            db_flown = {
+                (_normalize_flight(sv.flight_number), sv.flight_date)
+                for sv in schedules
+                if sv.operational_flag and sv.origin == 'SUB' and not is_charter_flight(sv.flight_number)
+            }
+            db_dates = [sv.flight_date for sv in schedules if sv.operational_flag or sv.ghp_std or sv.ghp_atd]
+            if not db_dates:
+                db_dates = [sv.flight_date for sv in schedules]
+            if db_dates:
+                coverage.append((min(db_dates), max(db_dates)))
+                flown.update(db_flown)
+
     return {'flown': flown, 'coverage': coverage}
 
 
@@ -215,6 +273,7 @@ def _pprp_letter_flight(pdf_path, flight_norm, start_date, cache):
     berlaku; fallback ke match flight number saja. cache: dict per-run agar
     satu PDF hanya diparse sekali.
     """
+    pdf_path = _resolve_path(pdf_path)
     if not pdf_path or not os.path.exists(pdf_path):
         return None
     if pdf_path not in cache:
@@ -456,7 +515,7 @@ def _finalize_flight_data(flight_data, tpl_meta=None):
 def _submission_type_for(pprp, pdf_cache, default='Perubahan'):
     """Tipe permohonan (Perubahan/Perpanjangan/Penambahan/...) dari PDF surat
     segmen tsb — tidak tersimpan di DB, hanya ada di file sumber."""
-    pdf_path = pprp.get('source_pprp_path')
+    pdf_path = _resolve_path(pprp.get('source_pprp_path'))
     if pdf_path and os.path.exists(pdf_path):
         if pdf_path not in pdf_cache:
             try:
@@ -768,20 +827,12 @@ def generate_report(project_id: int, template_path: str, output_path: str) -> in
     month = project.month
 
     # Tentukan template path
+    template_path = _resolve_template_path(template_path or project.template_path)
     if not template_path:
-        template_path = project.template_path
-        
-    # Fallback ke static template
-    if not template_path or not os.path.exists(template_path):
-        from django.conf import settings
-        static_template = os.path.join(settings.BASE_DIR, 'static', 'tpl', 'form_realisasi_winter26.xlsx')
-        if os.path.exists(static_template):
-            template_path = static_template
-        else:
-            raise FileNotFoundError(
-                f"Template Excel tidak ditemukan: '{template_path}' maupun di folder static. "
-                "Pastikan file form_realisasi_winter26.xlsx ada di dalam folder static/tpl/."
-            )
+        raise FileNotFoundError(
+            "Template Excel tidak ditemukan di static/tpl/ maupun media/uploads/. "
+            "Pastikan file form_realisasi_winter26.xlsx tersedia."
+        )
 
     # --- Ambil schedule versions SEMUA project ---
     # Laporan bulanan = irisan rekap musim untuk bulan ini. Surat PPRP yang
@@ -1228,14 +1279,9 @@ def generate_rekap_report(output_path: str) -> int:
     if not latest_project:
         raise ValueError("Belum ada data Project sama sekali di dalam sistem.")
         
-    template_path = latest_project.template_path
-    if not template_path or not os.path.exists(template_path):
-        from django.conf import settings
-        static_template = os.path.join(settings.BASE_DIR, 'static', 'tpl', 'form_realisasi_winter26.xlsx')
-        if os.path.exists(static_template):
-            template_path = static_template
-        else:
-            raise FileNotFoundError("Template Excel tidak ditemukan untuk generate rekap.")
+    template_path = _resolve_template_path(latest_project.template_path)
+    if not template_path:
+        raise FileNotFoundError("Template Excel tidak ditemukan untuk generate rekap.")
 
     schedules = ScheduleVersion.objects.all().order_by('flight_number', 'version_number', 'flight_date')
 
@@ -1323,8 +1369,8 @@ def load_template_flight_metadata(template_path: str = None) -> dict:
             return datetime.date(yr, mon, d)
         return None
 
-    path_to_use = template_path if (template_path and os.path.exists(template_path)) else os.path.join('static', 'tpl', 'form_realisasi_winter26.xlsx')
-    if not os.path.exists(path_to_use):
+    path_to_use = _resolve_template_path(template_path)
+    if not path_to_use:
         return {}
 
     try:

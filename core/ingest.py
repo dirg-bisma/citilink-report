@@ -28,6 +28,7 @@ pilihan multi-file dan tetap melapor "Berhasil" (kasus QG356 hilang,
 import os
 from dataclasses import dataclass, field
 
+from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 
 from core.models import Project, SourceFile
@@ -37,7 +38,7 @@ from core.parsers.wtt import detect_wtt_period
 from core.services import (delete_source_file, process_ghp, process_pprp, process_wtt, _fmt_date_id,
                            letter_covers_month, letter_sort_key, letter_sub_flights)
 
-UPLOAD_DIR = os.path.join('media', 'uploads')
+UPLOAD_DIR = os.path.join(str(settings.MEDIA_ROOT), 'uploads')
 
 MONTH_NAMES = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April',
